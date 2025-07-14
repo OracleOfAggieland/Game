@@ -120,4 +120,19 @@
   .snake-game {
     padding: 10px;
   }
+  /* Prevent arrow key scrolling globally when game is focused */
+.snake-game {
+  /* existing styles... */
+  outline: none; /* Remove focus outline */
+}
+
+/* Optional: Prevent scrolling on the entire page when playing */
+body.game-active {
+  overflow: hidden;
+}
+
+/* Ensure the game container can receive focus */
+.snake-game:focus {
+  outline: none;
+}
 }

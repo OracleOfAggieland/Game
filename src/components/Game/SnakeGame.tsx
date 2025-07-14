@@ -94,6 +94,11 @@ const SnakeGame: React.FC = () => {
 
   // Handle keyboard input
   const handleKeyPress = useCallback((e: KeyboardEvent) => {
+    // Prevent default behavior for arrow keys and space to stop page scrolling
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
+      e.preventDefault();
+    }
+
     if (!gameStarted) {
       if (e.code === 'Space') {
         setGameStarted(true);
