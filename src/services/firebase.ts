@@ -5,13 +5,13 @@ import { getFirestore } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 
 const firebaseConfig = {
-  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
-  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  apiKey: "AIzaSyBxYjBKXcZiCvvUAIgiFkxqjX8UcfmGxOg",
+  authDomain: "game-dd61b.firebaseapp.com",
   projectId: "game-dd61b",
-  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
-  appId: process.env.REACT_APP_FIREBASE_APP_ID,
-  measurementId: process.env.REACT_APP_FIREBASE_MEASUREMENT_ID
+  storageBucket: "game-dd61b.firebasestorage.app",
+  messagingSenderId: "173995855484",
+  appId: "1:173995855484:web:2a63e6055f96bbf519c3f9",
+  measurementId: "G-D6Z28RBPBW"
 };
 
 // Initialize Firebase
