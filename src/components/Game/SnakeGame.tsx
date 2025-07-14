@@ -1,6 +1,11 @@
 // src/components/Game/SnakeGame.tsx
 import React, { useState, useEffect, useCallback } from 'react';
+import { useAuth } from '../../contexts/AuthContext';
+import { updateUserStats } from '../../services/auth';
+import UserProfile from '../User/UserProfile';
+import LoginForm from '../Auth/LoginForm';
 import './SnakeGame.css';
+import '../Auth/Auth.css';
 
 interface Position {
   x: number;
@@ -15,12 +20,15 @@ const INITIAL_FOOD = { x: 15, y: 15 };
 const INITIAL_DIRECTION: Direction = 'RIGHT';
 
 const SnakeGame: React.FC = () => {
+  const { currentUser, userData, loading, refreshUserData } = useAuth();
   const [snake, setSnake] = useState<Position[]>(INITIAL_SNAKE);
   const [food, setFood] = useState<Position>(INITIAL_FOOD);
   const [direction, setDirection] = useState<Direction>(INITIAL_DIRECTION);
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
   const [gameStarted, setGameStarted] = useState(false);
+  const [showAuth, setShowAuth] = useState(false);
+  const [isNewHighScore, setIsNewHighScore] = useState(false);
 
   // Generate random food position
   const generateFood = useCallback(() => {
@@ -48,6 +56,25 @@ const SnakeGame: React.FC = () => {
     return false;
   };
 
+  // Handle game over
+  const handleGameOver = useCallback(async () => {
+    setGameOver(true);
+    
+    // Check for new high score
+    const isNewHigh = userData ? score > userData.highScore : false;
+    setIsNewHighScore(isNewHigh);
+    
+    // Update user stats if logged in
+    if (currentUser) {
+      try {
+        await updateUserStats(currentUser.uid, score);
+        await refreshUserData();
+      } catch (error) {
+        console.error('Error updating user stats:', error);
+      }
+    }
+  }, [currentUser, score, userData, refreshUserData]);
+
   // Move snake
   const moveSnake = useCallback(() => {
     if (gameOver || !gameStarted) return;
@@ -74,7 +101,7 @@ const SnakeGame: React.FC = () => {
 
       // Check collision
       if (checkCollision(head, newSnake)) {
-        setGameOver(true);
+        handleGameOver();
         return currentSnake;
       }
 
@@ -90,7 +117,7 @@ const SnakeGame: React.FC = () => {
 
       return newSnake;
     });
-  }, [direction, food, gameOver, gameStarted, generateFood]);
+  }, [direction, food, gameOver, gameStarted, generateFood, handleGameOver]);
 
   // Handle keyboard input
   const handleKeyPress = useCallback((e: KeyboardEvent) => {
@@ -99,9 +126,10 @@ const SnakeGame: React.FC = () => {
       e.preventDefault();
     }
 
-    if (!gameStarted) {
+    if (!gameStarted && !gameOver) {
       if (e.code === 'Space') {
         setGameStarted(true);
+        setIsNewHighScore(false);
       }
       return;
     }
@@ -115,6 +143,7 @@ const SnakeGame: React.FC = () => {
         setGameOver(false);
         setScore(0);
         setGameStarted(true);
+        setIsNewHighScore(false);
       }
       return;
     }
@@ -175,11 +204,45 @@ const SnakeGame: React.FC = () => {
     return board;
   };
 
+  if (loading) {
+    return (
+      <div className="snake-game">
+        <div className="game-message">
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="snake-game">
+      {currentUser ? (
+        <UserProfile />
+      ) : (
+        <div style={{ marginBottom: '20px', textAlign: 'center' }}>
+          <button 
+            onClick={() => setShowAuth(true)} 
+            className="submit-btn"
+            style={{ maxWidth: '200px', margin: '0 auto' }}
+          >
+            Login / Sign Up
+          </button>
+          <p style={{ color: '#ccc', marginTop: '10px', fontSize: '14px' }}>
+            Sign in to save your high scores!
+          </p>
+        </div>
+      )}
+
       <div className="game-info">
         <h1>Snake Game</h1>
-        <div className="score">Score: {score}</div>
+        <div className="score">
+          Current Score: {score}
+          {userData && (
+            <div style={{ fontSize: '16px', marginTop: '5px', color: '#00ff88' }}>
+              Best: {userData.highScore}
+            </div>
+          )}
+        </div>
       </div>
       
       <div className="game-board">
@@ -190,14 +253,32 @@ const SnakeGame: React.FC = () => {
         <div className="game-message">
           <p>Press SPACE to start!</p>
           <p>Use arrow keys or WASD to move</p>
+          {currentUser && (
+            <p style={{ color: '#00ff88', fontSize: '14px' }}>
+              Playing as {userData?.displayName}
+            </p>
+          )}
         </div>
       )}
 
       {gameOver && (
         <div className="game-message">
           <h2>Game Over!</h2>
+          {isNewHighScore && (
+            <p style={{ color: '#ffaa00', fontSize: '20px', fontWeight: 'bold' }}>
+              🎉 NEW HIGH SCORE! 🎉
+            </p>
+          )}
           <p>Final Score: {score}</p>
+          {userData && (
+            <p>Best Score: {userData.highScore}</p>
+          )}
           <p>Press SPACE to play again</p>
+          {!currentUser && (
+            <p style={{ color: '#00ff88', fontSize: '14px', marginTop: '10px' }}>
+              Sign in to save your scores!
+            </p>
+          )}
         </div>
       )}
 
@@ -205,6 +286,35 @@ const SnakeGame: React.FC = () => {
         <p>Controls: Arrow keys or WASD to move</p>
         {gameStarted && !gameOver && <p>Length: {snake.length}</p>}
       </div>
+
+      {showAuth && (
+        <div className="auth-overlay">
+          <div style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowAuth(false)}
+              style={{
+                position: 'absolute',
+                top: '-10px',
+                right: '-10px',
+                background: '#ff4444',
+                color: 'white',
+                border: 'none',
+                borderRadius: '50%',
+                width: '30px',
+                height: '30px',
+                cursor: 'pointer',
+                fontSize: '18px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center'
+              }}
+            >
+              ×
+            </button>
+            <LoginForm onSuccess={() => setShowAuth(false)} />
+          </div>
+        </div>
+      )}
     </div>
   );
 };

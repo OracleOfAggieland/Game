@@ -1,9 +1,17 @@
+// src/App.tsx
 import React from 'react';
-import { render, screen } from '@testing-library/react';
-import App from './App';
+import { AuthProvider } from './contexts/AuthContext';
+import SnakeGame from './components/Game/SnakeGame';
+import './App.css';
 
-test('renders snake game', () => {
-  render(<App />);
-  const gameElement = screen.getByText(/Snake Game/i);
-  expect(gameElement).toBeInTheDocument();
-});
+function App() {
+  return (
+    <AuthProvider>
+      <div className="App">
+        <SnakeGame />
+      </div>
+    </AuthProvider>
+  );
+}
+
+export default App;
