@@ -74,6 +74,114 @@ const MultiplayerSnakeGame: React.FC = () => {
     color: SNAKE_COLORS[index % SNAKE_COLORS.length],
     isAlive: true,
   });
+
+  // AI logic for bot movement
+  const getAIDirection = useCallback((snake: Snake, food: Position[], allSnakes: Snake[]): Direction => {
+    const head = snake.positions[0];
+    const currentDirection = snake.direction;
+    
+    // Get all occupied positions by other snakes (including self body)
+    const occupiedPositions = new Set<string>();
+    allSnakes.forEach(s => {
+      if (s.isAlive) {
+        s.positions.forEach((pos, index) => {
+          // Don't include the current snake's head in occupied positions
+          if (!(s.id === snake.id && index === 0)) {
+            occupiedPositions.add(`${pos.x},${pos.y}`);
+          }
+        });
+      }
+    });
+
+    // Find the closest food
+    let closestFood = food[0];
+    let minDistance = Infinity;
+    food.forEach(f => {
+      const distance = Math.abs(head.x - f.x) + Math.abs(head.y - f.y);
+      if (distance < minDistance) {
+        minDistance = distance;
+        closestFood = f;
+      }
+    });
+
+    // Helper function to check if a position is safe
+    const isSafe = (x: number, y: number): boolean => {
+      return x >= 0 && x < BOARD_SIZE && 
+             y >= 0 && y < BOARD_SIZE && 
+             !occupiedPositions.has(`${x},${y}`);
+    };
+
+    // Get possible directions (not opposite to current)
+    const possibleDirections: Direction[] = [];
+    const oppositeDirection = {
+      'UP': 'DOWN',
+      'DOWN': 'UP',
+      'LEFT': 'RIGHT',
+      'RIGHT': 'LEFT'
+    }[currentDirection] as Direction;
+
+    (['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[]).forEach(dir => {
+      if (dir !== oppositeDirection) {
+        const nextPos = getNextPosition(head, dir);
+        if (isSafe(nextPos.x, nextPos.y)) {
+          possibleDirections.push(dir);
+        }
+      }
+    });
+
+    // If no safe directions, try to continue current direction
+    if (possibleDirections.length === 0) {
+      const nextPos = getNextPosition(head, currentDirection);
+      if (isSafe(nextPos.x, nextPos.y)) {
+        return currentDirection;
+      }
+      // If even current direction is unsafe, try any direction to avoid immediate death
+      for (const dir of ['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[]) {
+        const nextPos = getNextPosition(head, dir);
+        if (isSafe(nextPos.x, nextPos.y)) {
+          return dir;
+        }
+      }
+      return currentDirection; // Last resort
+    }
+
+    // If only one safe direction, take it
+    if (possibleDirections.length === 1) {
+      return possibleDirections[0];
+    }
+
+    // Choose direction that moves towards closest food
+    let bestDirection = possibleDirections[0];
+    let bestScore = Infinity;
+
+    possibleDirections.forEach(dir => {
+      const nextPos = getNextPosition(head, dir);
+      const distanceToFood = Math.abs(nextPos.x - closestFood.x) + Math.abs(nextPos.y - closestFood.y);
+      
+      // Bonus for continuing in same direction (reduces erratic movement)
+      const continuityBonus = dir === currentDirection ? -0.5 : 0;
+      const score = distanceToFood + continuityBonus;
+      
+      if (score < bestScore) {
+        bestScore = score;
+        bestDirection = dir;
+      }
+    });
+
+    return bestDirection;
+  }, []);
+
+  // Helper function to get next position based on direction
+  const getNextPosition = (currentPos: Position, direction: Direction): Position => {
+    const newPos = { ...currentPos };
+    switch (direction) {
+      case 'UP': newPos.y -= 1; break;
+      case 'DOWN': newPos.y += 1; break;
+      case 'LEFT': newPos.x -= 1; break;
+      case 'RIGHT': newPos.x += 1; break;
+    }
+    return newPos;
+  };
   
   const createRoom = async () => {
     if (!playerName.trim()) return alert("Please enter your name!");
@@ -133,7 +241,14 @@ const MultiplayerSnakeGame: React.FC = () => {
           continue;
         }
         
-        let newDirection = p.isAI ? p.direction : direction; // Simplified AI, replace with your logic
+        // Use AI logic for bots, player input for human
+        let newDirection: Direction;
+        if (p.isAI) {
+          newDirection = getAIDirection(p, newFood, Object.values(currentRoom.players));
+        } else {
+          newDirection = direction;
+        }
+        
         let head = { ...p.positions[0] };
         
         switch (newDirection) {
@@ -146,49 +261,60 @@ const MultiplayerSnakeGame: React.FC = () => {
         nextMoves[p.id] = { newHead: head, newDirection: newDirection };
       }
       
-      const snakeBodies = new Set(Object.values(currentRoom.players).flatMap(s => s.positions.slice(1).map(p => `${p.x},${p.y}`)));
+      // Get all snake body positions (excluding heads for collision detection)
+      const snakeBodies = new Set(Object.values(currentRoom.players).flatMap(s => 
+        s.positions.slice(1).map(p => `${p.x},${p.y}`)
+      ));
   
       // Update players based on pre-calculated moves
       for (const p of Object.values(currentRoom.players)) {
-          if (!p.isAlive) {
-            updatedPlayers[p.id] = p;
-            continue;
-          }
+        if (!p.isAlive) {
+          updatedPlayers[p.id] = p;
+          continue;
+        }
 
         const { newHead, newDirection } = nextMoves[p.id];
         let newSnake = { ...p };
         
-        // Check for collisions
-        if (newHead.x < 0 || newHead.x >= BOARD_SIZE || newHead.y < 0 || newHead.y >= BOARD_SIZE || snakeBodies.has(`${newHead.x},${newHead.y}`)) {
-            newSnake.isAlive = false;
+        // Check for wall collisions and body collisions
+        if (newHead.x < 0 || newHead.x >= BOARD_SIZE || 
+            newHead.y < 0 || newHead.y >= BOARD_SIZE || 
+            snakeBodies.has(`${newHead.x},${newHead.y}`)) {
+          newSnake.isAlive = false;
         } else {
-            // Add self head to occupied positions for next iteration checks
-            Object.values(nextMoves).forEach(move => {
-                if (move !== nextMoves[p.id] && move.newHead.x === newHead.x && move.newHead.y === newHead.y) {
-                    newSnake.isAlive = false; // Head-on collision
-                }
-            })
+          // Check for head-to-head collisions
+          const headsAtSamePosition = Object.values(nextMoves).filter(move => 
+            move.newHead.x === newHead.x && move.newHead.y === newHead.y
+          );
+          
+          if (headsAtSamePosition.length > 1) {
+            newSnake.isAlive = false; // Head-on collision
+          }
         }
 
-        if(newSnake.isAlive) {
-            newSnake.positions.unshift(newHead);
-            newSnake.direction = newDirection;
-            
-            const foodIndex = newFood.findIndex(f => f.x === newHead.x && f.y === newHead.y);
-            if (foodIndex !== -1) {
-              newSnake.score += 10;
-              newFood.splice(foodIndex, 1);
-              foodEaten = true;
-            } else {
-              newSnake.positions.pop();
-            }
+        if (newSnake.isAlive) {
+          newSnake.positions = [newHead, ...newSnake.positions];
+          newSnake.direction = newDirection;
+          
+          const foodIndex = newFood.findIndex(f => f.x === newHead.x && f.y === newHead.y);
+          if (foodIndex !== -1) {
+            newSnake.score += 10;
+            newFood.splice(foodIndex, 1);
+            foodEaten = true;
+          } else {
+            newSnake.positions.pop(); // Remove tail if no food eaten
+          }
         }
+        
         updatedPlayers[p.id] = newSnake;
       }
       
       // If food was eaten, generate more
       if (foodEaten) {
-          newFood.push(...generateFood(Object.values(updatedPlayers)));
+        const alivePlayers = Object.values(updatedPlayers).filter(p => p.isAlive);
+        if (newFood.length < 3) { // Ensure minimum food on board
+          newFood.push(...generateFood(alivePlayers));
+        }
       }
   
       // In a real app, this update would be sent to Firebase
@@ -196,8 +322,7 @@ const MultiplayerSnakeGame: React.FC = () => {
       // For the mock, we set it directly.
       return { ...currentRoom, players: updatedPlayers, food: newFood };
     });
-  }, [gameRoom, direction]);
-
+  }, [gameRoom, direction, getAIDirection]);
 
   // Timer
   useEffect(() => {
@@ -225,12 +350,29 @@ const MultiplayerSnakeGame: React.FC = () => {
   }, [gameMode, gameRoom, updateGameState]);
   
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    // Prevent default browser behavior for arrow keys and WASD
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(e.key)) {
+      e.preventDefault();
+    }
+    
     let newDirection = direction;
     switch(e.key) {
-        case 'ArrowUp': case 'w': if(direction !== 'DOWN') newDirection = 'UP'; break;
-        case 'ArrowDown': case 's': if(direction !== 'UP') newDirection = 'DOWN'; break;
-        case 'ArrowLeft': case 'a': if(direction !== 'RIGHT') newDirection = 'LEFT'; break;
-        case 'ArrowRight': case 'd': if(direction !== 'LEFT') newDirection = 'RIGHT'; break;
+        case 'ArrowUp': 
+        case 'w': 
+          if(direction !== 'DOWN') newDirection = 'UP'; 
+          break;
+        case 'ArrowDown': 
+        case 's': 
+          if(direction !== 'UP') newDirection = 'DOWN'; 
+          break;
+        case 'ArrowLeft': 
+        case 'a': 
+          if(direction !== 'RIGHT') newDirection = 'LEFT'; 
+          break;
+        case 'ArrowRight': 
+        case 'd': 
+          if(direction !== 'LEFT') newDirection = 'RIGHT'; 
+          break;
     }
     setDirection(newDirection);
   }, [direction]);
@@ -247,11 +389,53 @@ const MultiplayerSnakeGame: React.FC = () => {
                 <h1>Multiplayer Arena</h1>
             </div>
             <div className="menu-container" style={{maxWidth: '400px'}}>
-                <input type="text" placeholder="Enter your name" value={playerName} onChange={e => setPlayerName(e.target.value)} style={{width: '100%', padding: '10px', marginBottom: '15px'}}/>
-                <button onClick={createRoom} disabled={!playerName.trim()} className="menu-button">Create Arena</button>
-                <div style={{margin: '20px 0', textAlign: 'center'}}>- OR -</div>
-                <input type="text" placeholder="Enter room code" value={roomCode} onChange={e => setRoomCode(e.target.value.toUpperCase())} style={{width: '100%', padding: '10px', marginBottom: '15px'}}/>
-                <button onClick={joinRoom} disabled={!playerName.trim() || !roomCode.trim()} className="menu-button multiplayer">Join Arena</button>
+                <input 
+                  type="text" 
+                  placeholder="Enter your name" 
+                  value={playerName} 
+                  onChange={e => setPlayerName(e.target.value)} 
+                  style={{
+                    width: '100%', 
+                    padding: '10px', 
+                    marginBottom: '15px',
+                    border: '2px solid #00ff88',
+                    borderRadius: '5px',
+                    backgroundColor: '#16213e',
+                    color: '#eee',
+                    fontSize: '16px'
+                  }}
+                />
+                <button 
+                  onClick={createRoom} 
+                  disabled={!playerName.trim()} 
+                  className="menu-button"
+                >
+                  Create Arena
+                </button>
+                <div style={{margin: '20px 0', textAlign: 'center', color: '#ccc'}}>- OR -</div>
+                <input 
+                  type="text" 
+                  placeholder="Enter room code" 
+                  value={roomCode} 
+                  onChange={e => setRoomCode(e.target.value.toUpperCase())} 
+                  style={{
+                    width: '100%', 
+                    padding: '10px', 
+                    marginBottom: '15px',
+                    border: '2px solid #00ff88',
+                    borderRadius: '5px',
+                    backgroundColor: '#16213e',
+                    color: '#eee',
+                    fontSize: '16px'
+                  }}
+                />
+                <button 
+                  onClick={joinRoom} 
+                  disabled={!playerName.trim() || !roomCode.trim()} 
+                  className="menu-button multiplayer"
+                >
+                  Join Arena
+                </button>
             </div>
         </div>
     );
@@ -311,6 +495,11 @@ const MultiplayerSnakeGame: React.FC = () => {
           <p>Winner: {gameRoom.players[Object.values(gameRoom.players).reduce((a,b) => a.score > b.score ? a:b).id]?.name}</p>
         </div>
       )}
+      
+      <div className="controls">
+        <p>Controls: Arrow keys / WASD</p>
+        <p>Compete against AI bots for the highest score!</p>
+      </div>
     </div>
   );
 };
