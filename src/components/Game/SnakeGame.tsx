@@ -45,13 +45,20 @@ const SnakeGame: React.FC = () => {
   }, [score, highScore]);
 
   const generateFood = useCallback((currentSnake: Position[]) => {
+    let attempts = 0;
     let newFood: Position;
+    
     do {
       newFood = {
         x: Math.floor(Math.random() * BOARD_SIZE),
         y: Math.floor(Math.random() * BOARD_SIZE)
       };
-    } while (currentSnake.some(segment => segment.x === newFood.x && segment.y === newFood.y));
+      attempts++;
+    } while (
+      attempts < 100 && 
+      currentSnake.some(segment => segment.x === newFood.x && segment.y === newFood.y)
+    );
+    
     return newFood;
   }, []);
 

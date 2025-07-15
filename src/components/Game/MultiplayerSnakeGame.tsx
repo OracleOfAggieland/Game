@@ -10,17 +10,7 @@ import './SnakeGame.css';
 const db = {}; 
 const doc = (...args: any[]) => ({});
 const setDoc = async (...args: any[]) => {};
-const _onSnapshot = (doc: any, callback: Function) => {
-    console.log("Mock onSnapshot called. In a real app, this would listen for DB changes.");
-    return () => {}; // Return an unsubscribe function
-};
 const updateDoc = async (...args: any[]) => {};
-const _deleteDoc = async (...args: any[]) => {};
-const _serverTimestamp = () => new Date();
-const _getDoc = async (...args: any[]) => ({
-    exists: () => false, 
-    data: () => ({})
-});
 // END OF MOCKING
 
 interface Position { x: number; y: number; }
