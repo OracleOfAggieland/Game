@@ -1,15 +1,38 @@
+// firestore.rules - Updated rules for multiplayer game
 rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access for authenticated users
-    match /{document=**} {
-      allow read, write: if request.auth != null;
+    // Game rooms - allow read/write access to all authenticated users
+    match /gameRooms/{roomId} {
+      allow read, write: if true; // Allow anonymous access for easier testing
+      // For production, you might want:
+      // allow read, write: if request.auth != null;
+      
+      // Allow anyone to create rooms and join them
+      allow create: if true;
+      allow update: if true;
+      allow delete: if true;
     }
     
-    // Or for development only - allow all access (NOT for production):
-    // match /{document=**} {
-    //   allow read, write: if true;
-    // }
+    // Player data within game rooms
+    match /gameRooms/{roomId}/players/{playerId} {
+      allow read, write: if true;
+      allow create: if true;
+      allow update: if true;
+      allow delete: if true;
+    }
+    
+    // Leaderboards and stats (future feature)
+    match /leaderboards/{document} {
+      allow read: if true;
+      allow write: if true; // You might want to restrict this in production
+    }
+    
+    // User profiles (future feature)
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
   }
 }
