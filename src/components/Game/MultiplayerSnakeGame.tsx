@@ -1,20 +1,23 @@
 // src/components/Game/MultiplayerSnakeGame.tsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
-// This component requires a Firebase setup. Ensure `firebase.ts` is configured.
-// import { db } from '../../services/firebase'; 
-// import { doc, setDoc, onSnapshot, updateDoc, deleteDoc, serverTimestamp, getDoc } from 'firebase/firestore';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import './SnakeGame.css';
 
 // MOCKING FIREBASE for demonstration since I can't access a real database.
-// Replace these mocks with your actual Firebase imports.
 const db = {}; 
 const doc = (...args: any[]) => ({});
 const setDoc = async (...args: any[]) => {};
 const updateDoc = async (...args: any[]) => {};
-// END OF MOCKING
 
 interface Position { x: number; y: number; }
 type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
+
+interface AIPersonality {
+  aggression: number; // 0-1: How likely to take risks for food
+  intelligence: number; // 0-1: How good at pathfinding and avoiding danger
+  patience: number; // 0-1: How willing to wait for better opportunities
+  name: string;
+  description: string;
+}
 
 interface Snake {
   id: string;
@@ -25,6 +28,8 @@ interface Snake {
   color: string;
   isAlive: boolean;
   isAI: boolean;
+  aiPersonality?: AIPersonality;
+  lastDirectionChange?: number; // Timestamp to prevent rapid direction changes
 }
 
 interface GameRoom {
@@ -38,7 +43,48 @@ interface GameRoom {
 const BOARD_SIZE = 25;
 const MAX_PLAYERS = 6;
 const GAME_DURATION = 180;
-const AI_NAMES = ['Viper', 'Python', 'Cobra', 'Mamba', 'Anaconda'];
+const GAME_SPEED = 120; // Fixed speed for multiplayer
+const MIN_DIRECTION_CHANGE_INTERVAL = 100; // Minimum ms between direction changes
+
+// AI Personalities with different intelligence levels
+const AI_PERSONALITIES: AIPersonality[] = [
+  { 
+    aggression: 0.9, 
+    intelligence: 0.95, 
+    patience: 0.3, 
+    name: 'Viper', 
+    description: 'Aggressive and smart' 
+  },
+  { 
+    aggression: 0.4, 
+    intelligence: 0.85, 
+    patience: 0.8, 
+    name: 'Python', 
+    description: 'Patient strategist' 
+  },
+  { 
+    aggression: 0.7, 
+    intelligence: 0.6, 
+    patience: 0.5, 
+    name: 'Cobra', 
+    description: 'Balanced fighter' 
+  },
+  { 
+    aggression: 0.3, 
+    intelligence: 0.4, 
+    patience: 0.9, 
+    name: 'Mamba', 
+    description: 'Cautious survivor' 
+  },
+  { 
+    aggression: 0.8, 
+    intelligence: 0.3, 
+    patience: 0.2, 
+    name: 'Anaconda', 
+    description: 'Reckless hunter' 
+  }
+];
+
 const SNAKE_COLORS = ['#00ff88', '#ff4444', '#4444ff', '#ffaa00', '#ff44ff', '#44ffff'];
 
 const MultiplayerSnakeGame: React.FC = () => {
@@ -51,10 +97,13 @@ const MultiplayerSnakeGame: React.FC = () => {
   const [direction, setDirection] = useState<Direction>('RIGHT');
   const [isMobile, setIsMobile] = useState(false);
 
+  // Performance optimization refs
   const gameLoopRef = useRef<number | null>(null);
   const touchStartPos = useRef<{ x: number, y: number } | null>(null);
   const directionQueue = useRef<Direction[]>([]);
   const lastProcessedDirection = useRef<Direction>('RIGHT');
+  const lastMoveTime = useRef<number>(0);
+  const lastPlayerDirectionChange = useRef<number>(0);
 
   // Detect mobile device
   useEffect(() => {
@@ -77,6 +126,19 @@ const MultiplayerSnakeGame: React.FC = () => {
     return opposites[currentDir] !== newDir;
   }, []);
 
+  // Optimized direction queue processing with timing
+  const processDirectionQueue = useCallback(() => {
+    const now = performance.now();
+    if (directionQueue.current.length > 0 && now - lastPlayerDirectionChange.current > MIN_DIRECTION_CHANGE_INTERVAL) {
+      const nextDirection = directionQueue.current.shift()!;
+      if (isValidDirectionChange(lastProcessedDirection.current, nextDirection)) {
+        setDirection(nextDirection);
+        lastProcessedDirection.current = nextDirection;
+        lastPlayerDirectionChange.current = now;
+      }
+    }
+  }, [isValidDirectionChange]);
+
   // Queue direction changes to prevent rapid direction reversals
   const queueDirection = useCallback((newDirection: Direction) => {
     if (gameMode !== 'playing' || gameRoom?.gameState !== 'playing') return;
@@ -92,43 +154,94 @@ const MultiplayerSnakeGame: React.FC = () => {
       if (directionQueue.current.length === 0 || 
           directionQueue.current[directionQueue.current.length - 1] !== newDirection) {
         // Limit queue size to prevent too many direction changes
-        if (directionQueue.current.length < 2) {
+        if (directionQueue.current.length < 1) { // Reduced queue size for more responsive controls
           directionQueue.current.push(newDirection);
         }
       }
     }
   }, [gameMode, gameRoom, isValidDirectionChange]);
 
-  const generateFood = (snakes: Snake[]): Position[] => {
-    const occupied = new Set(snakes.flatMap(s => s.positions.map(p => `${p.x},${p.y}`)));
+  const generateFood = useCallback((snakes: Snake[]): Position[] => {
+    const occupiedCells = new Set(snakes.flatMap(s => s.isAlive ? s.positions.map(p => `${p.x},${p.y}`) : []));
     const food: Position[] = [];
-    for (let i = 0; i < 5; i++) {
-        let newFood: Position;
-        do {
-            newFood = { x: Math.floor(Math.random() * BOARD_SIZE), y: Math.floor(Math.random() * BOARD_SIZE) };
-        } while (occupied.has(`${newFood.x},${newFood.y}`));
+    
+    for (let i = 0; i < 6; i++) { // Increased food count for better gameplay
+      let newFood: Position;
+      let attempts = 0;
+      do {
+        newFood = { 
+          x: Math.floor(Math.random() * BOARD_SIZE), 
+          y: Math.floor(Math.random() * BOARD_SIZE) 
+        };
+        attempts++;
+      } while (occupiedCells.has(`${newFood.x},${newFood.y}`) && attempts < 200);
+      
+      if (attempts < 200) { // Only add if we found a valid position
         food.push(newFood);
-        occupied.add(`${newFood.x},${newFood.y}`);
+        occupiedCells.add(`${newFood.x},${newFood.y}`);
+      }
     }
     return food;
-  };
+  }, []);
 
-  const createInitialSnake = (id: string, name: string, index: number, isAI: boolean = false): Snake => ({
-    id, name, isAI,
-    positions: [{ x: 3 + (index * 2), y: 3 }],
-    direction: 'RIGHT',
-    score: 0,
-    color: SNAKE_COLORS[index % SNAKE_COLORS.length],
-    isAlive: true,
-  });
+  const createInitialSnake = useCallback((id: string, name: string, index: number, isAI: boolean = false): Snake => {
+    // Create starting positions that are more spread out to prevent immediate collisions
+    const startPositions = [
+      { x: 3, y: 3 },
+      { x: BOARD_SIZE - 4, y: 3 },
+      { x: 3, y: BOARD_SIZE - 4 },
+      { x: BOARD_SIZE - 4, y: BOARD_SIZE - 4 },
+      { x: Math.floor(BOARD_SIZE / 2), y: 3 },
+      { x: Math.floor(BOARD_SIZE / 2), y: BOARD_SIZE - 4 }
+    ];
+    
+    const startPos = startPositions[index % startPositions.length];
+    
+    const snake: Snake = {
+      id, 
+      name, 
+      isAI,
+      positions: [startPos],
+      direction: 'RIGHT',
+      score: 0,
+      color: SNAKE_COLORS[index % SNAKE_COLORS.length],
+      isAlive: true,
+      lastDirectionChange: 0
+    };
+    
+    if (isAI) {
+      // Assign a random AI personality with some variation
+      const basePersonality = AI_PERSONALITIES[(index - 1) % AI_PERSONALITIES.length];
+      snake.aiPersonality = {
+        ...basePersonality,
+        // Add some randomness to make each bot unique
+        aggression: Math.max(0.1, Math.min(0.9, basePersonality.aggression + (Math.random() - 0.5) * 0.3)),
+        intelligence: Math.max(0.2, Math.min(0.9, basePersonality.intelligence + (Math.random() - 0.5) * 0.2)),
+        patience: Math.max(0.1, Math.min(0.9, basePersonality.patience + (Math.random() - 0.5) * 0.3))
+      };
+    }
+    
+    return snake;
+  }, []);
 
-  // AI logic for bot movement
+  // Enhanced AI logic with personality-based decision making
   const getAIDirection = useCallback((snake: Snake, food: Position[], allSnakes: Snake[]): Direction => {
+    if (!snake.aiPersonality) return snake.direction;
+    
     const head = snake.positions[0];
     const currentDirection = snake.direction;
+    const personality = snake.aiPersonality;
+    const now = performance.now();
     
-    // Get all occupied positions by other snakes (including self body)
+    // Prevent too frequent direction changes for AI too
+    if (snake.lastDirectionChange && now - snake.lastDirectionChange < MIN_DIRECTION_CHANGE_INTERVAL) {
+      return currentDirection;
+    }
+    
+    // Get all occupied positions by other snakes
     const occupiedPositions = new Set<string>();
+    const dangerousPositions = new Set<string>(); // Positions that will be dangerous soon
+    
     allSnakes.forEach(s => {
       if (s.isAlive) {
         s.positions.forEach((pos, index) => {
@@ -137,34 +250,62 @@ const MultiplayerSnakeGame: React.FC = () => {
             occupiedPositions.add(`${pos.x},${pos.y}`);
           }
         });
+        
+        // Predict where other snake heads will be (for smarter AIs)
+        if (s.id !== snake.id && s.isAlive && personality.intelligence > 0.6) {
+          const otherHead = s.positions[0];
+          const nextPos = getNextPosition(otherHead, s.direction);
+          if (isValidPosition(nextPos)) {
+            dangerousPositions.add(`${nextPos.x},${nextPos.y}`);
+          }
+        }
       }
     });
 
-    // Find the closest food
-    let closestFood = food[0];
-    let minDistance = Infinity;
-    food.forEach(f => {
-      const distance = Math.abs(head.x - f.x) + Math.abs(head.y - f.y);
-      if (distance < minDistance) {
-        minDistance = distance;
-        closestFood = f;
+    // Find food targets based on AI personality
+    const foodTargets = food.map(f => ({
+      food: f,
+      distance: Math.abs(head.x - f.x) + Math.abs(head.y - f.y),
+      risk: calculateRisk(f, occupiedPositions, dangerousPositions)
+    })).sort((a, b) => {
+      // Smart AIs consider both distance and risk
+      if (personality.intelligence > 0.7) {
+        const scoreA = a.distance + (a.risk * (1 - personality.aggression) * 5);
+        const scoreB = b.distance + (b.risk * (1 - personality.aggression) * 5);
+        return scoreA - scoreB;
       }
+      // Dumber AIs just go for closest food
+      return a.distance - b.distance;
     });
+
+    const targetFood = foodTargets[0]?.food || food[0];
 
     // Helper function to check if a position is safe
-    const isSafe = (x: number, y: number): boolean => {
-      return x >= 0 && x < BOARD_SIZE && 
-             y >= 0 && y < BOARD_SIZE && 
-             !occupiedPositions.has(`${x},${y}`);
+    const isSafe = (x: number, y: number, depth: number = 0): boolean => {
+      if (!isValidPosition({x, y})) return false;
+      
+      const posKey = `${x},${y}`;
+      if (occupiedPositions.has(posKey)) return false;
+      
+      // Smart AIs avoid predicted dangerous positions
+      if (personality.intelligence > 0.5 && dangerousPositions.has(posKey)) return false;
+      
+      // Very smart AIs do lookahead planning
+      if (personality.intelligence > 0.8 && depth < 2) {
+        const futurePositions = [
+          {x: x+1, y}, {x: x-1, y}, {x, y: y+1}, {x, y: y-1}
+        ];
+        const safeNextMoves = futurePositions.filter(pos => isSafe(pos.x, pos.y, depth + 1));
+        return safeNextMoves.length > 1; // Ensure we don't trap ourselves
+      }
+      
+      return true;
     };
 
     // Get possible directions (not opposite to current)
     const possibleDirections: Direction[] = [];
     const oppositeDirection = {
-      'UP': 'DOWN',
-      'DOWN': 'UP',
-      'LEFT': 'RIGHT',
-      'RIGHT': 'LEFT'
+      'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT'
     }[currentDirection] as Direction;
 
     (['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[]).forEach(dir => {
@@ -182,14 +323,17 @@ const MultiplayerSnakeGame: React.FC = () => {
       if (isSafe(nextPos.x, nextPos.y)) {
         return currentDirection;
       }
-      // If even current direction is unsafe, try any direction to avoid immediate death
+      
+      // Last resort - try any direction
       for (const dir of ['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[]) {
-        const nextPos = getNextPosition(head, dir);
-        if (isSafe(nextPos.x, nextPos.y)) {
-          return dir;
+        if (dir !== oppositeDirection) {
+          const nextPos = getNextPosition(head, dir);
+          if (isValidPosition(nextPos) && !occupiedPositions.has(`${nextPos.x},${nextPos.y}`)) {
+            return dir;
+          }
         }
       }
-      return currentDirection; // Last resort
+      return currentDirection; // Accept fate
     }
 
     // If only one safe direction, take it
@@ -197,17 +341,48 @@ const MultiplayerSnakeGame: React.FC = () => {
       return possibleDirections[0];
     }
 
-    // Choose direction that moves towards closest food
+    // Choose best direction based on personality
     let bestDirection = possibleDirections[0];
     let bestScore = Infinity;
 
     possibleDirections.forEach(dir => {
       const nextPos = getNextPosition(head, dir);
-      const distanceToFood = Math.abs(nextPos.x - closestFood.x) + Math.abs(nextPos.y - closestFood.y);
+      let score = 0;
       
-      // Bonus for continuing in same direction (reduces erratic movement)
-      const continuityBonus = dir === currentDirection ? -0.5 : 0;
-      const score = distanceToFood + continuityBonus;
+      // Distance to target food
+      const distanceToFood = Math.abs(nextPos.x - targetFood.x) + Math.abs(nextPos.y - targetFood.y);
+      score += distanceToFood * personality.intelligence;
+      
+      // Bonus for continuing in same direction (reduces jittery movement)
+      if (dir === currentDirection) {
+        score -= 0.5 * personality.patience;
+      }
+      
+      // Penalty for getting too close to walls (smart AIs avoid corners)
+      if (personality.intelligence > 0.6) {
+        const wallDistance = Math.min(nextPos.x, BOARD_SIZE - 1 - nextPos.x, nextPos.y, BOARD_SIZE - 1 - nextPos.y);
+        if (wallDistance < 3) {
+          score += (3 - wallDistance) * 2;
+        }
+      }
+      
+      // Penalty for getting close to other snakes
+      let minSnakeDistance = Infinity;
+      allSnakes.forEach(s => {
+        if (s.id !== snake.id && s.isAlive) {
+          s.positions.forEach(pos => {
+            const dist = Math.abs(nextPos.x - pos.x) + Math.abs(nextPos.y - pos.y);
+            minSnakeDistance = Math.min(minSnakeDistance, dist);
+          });
+        }
+      });
+      
+      if (minSnakeDistance < 3) {
+        score += (3 - minSnakeDistance) * (1 - personality.aggression);
+      }
+      
+      // Add some randomness for less predictable behavior
+      score += Math.random() * (1 - personality.intelligence);
       
       if (score < bestScore) {
         bestScore = score;
@@ -218,8 +393,35 @@ const MultiplayerSnakeGame: React.FC = () => {
     return bestDirection;
   }, []);
 
+  // Helper functions
+  const isValidPosition = useCallback((pos: Position): boolean => {
+    return pos.x >= 0 && pos.x < BOARD_SIZE && pos.y >= 0 && pos.y < BOARD_SIZE;
+  }, []);
+
+  const calculateRisk = useCallback((foodPos: Position, occupied: Set<string>, dangerous: Set<string>): number => {
+    let risk = 0;
+    
+    // Check surrounding positions for danger
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const checkPos = `${foodPos.x + dx},${foodPos.y + dy}`;
+        if (occupied.has(checkPos)) risk += 1;
+        if (dangerous.has(checkPos)) risk += 0.5;
+      }
+    }
+    
+    // Check distance to walls
+    const wallDistance = Math.min(
+      foodPos.x, BOARD_SIZE - 1 - foodPos.x, 
+      foodPos.y, BOARD_SIZE - 1 - foodPos.y
+    );
+    if (wallDistance < 2) risk += 2;
+    
+    return risk;
+  }, []);
+
   // Helper function to get next position based on direction
-  const getNextPosition = (currentPos: Position, direction: Direction): Position => {
+  const getNextPosition = useCallback((currentPos: Position, direction: Direction): Position => {
     const newPos = { ...currentPos };
     switch (direction) {
       case 'UP': newPos.y -= 1; break;
@@ -228,7 +430,7 @@ const MultiplayerSnakeGame: React.FC = () => {
       case 'RIGHT': newPos.x += 1; break;
     }
     return newPos;
-  };
+  }, []);
   
   const createRoom = async () => {
     if (!playerName.trim()) return alert("Please enter your name!");
@@ -236,58 +438,57 @@ const MultiplayerSnakeGame: React.FC = () => {
     const humanPlayer = createInitialSnake(playerId, playerName, 0);
     const players: { [key: string]: Snake } = { [playerId]: humanPlayer };
 
+    // Create AI players with different personalities
     for (let i = 1; i < 4; i++) {
       const aiId = `ai_${i}`;
-      players[aiId] = createInitialSnake(aiId, AI_NAMES[i-1], i, true);
+      players[aiId] = createInitialSnake(aiId, AI_PERSONALITIES[(i-1) % AI_PERSONALITIES.length].name, i, true);
     }
     
     const newRoom: GameRoom = {
       id: newRoomCode,
       players,
       food: generateFood(Object.values(players)),
-      gameState: 'playing', // Auto-start for simplicity in this version
+      gameState: 'playing',
       maxPlayers: MAX_PLAYERS,
     };
     
     try {
         await setDoc(doc(db, 'gameRooms', newRoomCode), newRoom);
         setRoomCode(newRoomCode);
-        setGameRoom(newRoom); // Set room locally for mocked version
+        setGameRoom(newRoom);
         setGameMode('playing');
         // Reset direction tracking for new game
         directionQueue.current = [];
         lastProcessedDirection.current = 'RIGHT';
+        lastMoveTime.current = performance.now();
+        lastPlayerDirectionChange.current = 0;
     } catch(e) { console.error("Failed to create room:", e)}
   };
   
-  // NOTE: In a real app, `joinRoom` would fetch from Firebase. 
-  // Here, we'll just show an alert as mocking joining is complex.
   const joinRoom = async () => {
     alert("Joining rooms requires a full Firebase backend. Please use 'Create Arena' for this demo.");
   };
 
   const endGame = useCallback(() => {
     if (!gameRoom) return;
+    const alivePlayers = Object.values(gameRoom.players).filter(p => p.isAlive);
     const winner = Object.values(gameRoom.players).reduce((a, b) => a.score > b.score ? a : b);
+    
+    setGameRoom(prev => prev ? { ...prev, gameState: 'finished' } : null);
     updateDoc(doc(db, 'gameRooms', gameRoom.id), { gameState: 'finished', winner: winner.id });
   }, [gameRoom]);
 
   const updateGameState = useCallback(() => {
     if (!gameRoom || gameRoom.gameState !== 'playing') return;
+
+    const now = performance.now();
+    if (now - lastMoveTime.current < GAME_SPEED) return;
+    
+    lastMoveTime.current = now;
+    processDirectionQueue();
   
     setGameRoom(currentRoom => {
       if (!currentRoom) return null;
-      
-      // Process queued direction changes for human player
-      if (directionQueue.current.length > 0) {
-        const nextDirection = directionQueue.current.shift()!;
-        if (isValidDirectionChange(lastProcessedDirection.current, nextDirection)) {
-          setDirection(nextDirection);
-          lastProcessedDirection.current = nextDirection;
-        }
-      } else {
-        lastProcessedDirection.current = direction;
-      }
       
       const updatedPlayers: { [key: string]: Snake } = {};
       let newFood = [...currentRoom.food];
@@ -306,25 +507,23 @@ const MultiplayerSnakeGame: React.FC = () => {
         let newDirection: Direction;
         if (p.isAI) {
           newDirection = getAIDirection(p, newFood, Object.values(currentRoom.players));
+          // Update AI's last direction change time
+          if (newDirection !== p.direction) {
+            p.lastDirectionChange = now;
+          }
         } else {
           newDirection = lastProcessedDirection.current;
         }
         
-        let head = { ...p.positions[0] };
+        const head = { ...p.positions[0] };
+        const nextHead = getNextPosition(head, newDirection);
         
-        switch (newDirection) {
-          case 'UP': head.y -= 1; break;
-          case 'DOWN': head.y += 1; break;
-          case 'LEFT': head.x -= 1; break;
-          case 'RIGHT': head.x += 1; break;
-        }
-        
-        nextMoves[p.id] = { newHead: head, newDirection: newDirection };
+        nextMoves[p.id] = { newHead: nextHead, newDirection: newDirection };
       }
       
       // Get all snake body positions (excluding heads for collision detection)
       const snakeBodies = new Set(Object.values(currentRoom.players).flatMap(s => 
-        s.positions.slice(1).map(p => `${p.x},${p.y}`)
+        s.isAlive ? s.positions.slice(1).map(p => `${p.x},${p.y}`) : []
       ));
   
       // Update players based on pre-calculated moves
@@ -341,19 +540,22 @@ const MultiplayerSnakeGame: React.FC = () => {
         if (newHead.x < 0 || newHead.x >= BOARD_SIZE || 
             newHead.y < 0 || newHead.y >= BOARD_SIZE) {
           newSnake.isAlive = false;
+          console.log(`${newSnake.name} hit wall at ${newHead.x},${newHead.y}`);
         }
-        // Check for body collisions (excluding heads for now)
+        // Check for body collisions
         else if (snakeBodies.has(`${newHead.x},${newHead.y}`)) {
           newSnake.isAlive = false;
+          console.log(`${newSnake.name} hit body at ${newHead.x},${newHead.y}`);
         }
         // Check for head-to-head collisions
         else {
-          const headsAtSamePosition = Object.values(nextMoves).filter(move => 
-            move.newHead.x === newHead.x && move.newHead.y === newHead.y
+          const headsAtSamePosition = Object.entries(nextMoves).filter(([id, move]) => 
+            id !== p.id && move.newHead.x === newHead.x && move.newHead.y === newHead.y
           );
           
-          if (headsAtSamePosition.length > 1) {
+          if (headsAtSamePosition.length > 0) {
             newSnake.isAlive = false; // Head-on collision
+            console.log(`${newSnake.name} head-to-head collision at ${newHead.x},${newHead.y}`);
           }
         }
 
@@ -361,11 +563,13 @@ const MultiplayerSnakeGame: React.FC = () => {
           newSnake.positions = [newHead, ...newSnake.positions];
           newSnake.direction = newDirection;
           
+          // Check food consumption
           const foodIndex = newFood.findIndex(f => f.x === newHead.x && f.y === newHead.y);
           if (foodIndex !== -1) {
             newSnake.score += 10;
             newFood.splice(foodIndex, 1);
             foodEaten = true;
+            console.log(`${newSnake.name} ate food, score: ${newSnake.score}`);
           } else {
             newSnake.positions.pop(); // Remove tail if no food eaten
           }
@@ -374,20 +578,24 @@ const MultiplayerSnakeGame: React.FC = () => {
         updatedPlayers[p.id] = newSnake;
       }
       
-      // If food was eaten, generate more
-      if (foodEaten) {
+      // Generate new food if eaten
+      if (foodEaten || newFood.length < 4) {
         const alivePlayers = Object.values(updatedPlayers).filter(p => p.isAlive);
-        if (newFood.length < 3) { // Ensure minimum food on board
-          newFood.push(...generateFood(alivePlayers));
+        if (alivePlayers.length > 0) {
+          const additionalFood = generateFood(alivePlayers);
+          newFood = [...newFood, ...additionalFood].slice(0, 6); // Limit total food
         }
       }
+      
+      // Check if game should end (all human players dead or time up)
+      const aliveHumans = Object.values(updatedPlayers).filter(p => p.isAlive && !p.isAI);
+      if (aliveHumans.length === 0) {
+        setTimeout(() => endGame(), 2000); // Give a moment to see the final state
+      }
   
-      // In a real app, this update would be sent to Firebase
-      // and the local state would be set by the onSnapshot listener.
-      // For the mock, we set it directly.
       return { ...currentRoom, players: updatedPlayers, food: newFood };
     });
-  }, [gameRoom, direction, getAIDirection, isValidDirectionChange]);
+  }, [gameRoom, getAIDirection, processDirectionQueue, generateFood, endGame, getNextPosition]);
 
   // Timer
   useEffect(() => {
@@ -406,13 +614,27 @@ const MultiplayerSnakeGame: React.FC = () => {
     }
   }, [gameMode, gameRoom, endGame]);
   
-  // Game Loop
-  useEffect(() => {
+  // High-performance game loop using requestAnimationFrame
+  const gameLoop = useCallback(() => {
     if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
-      gameLoopRef.current = window.setInterval(updateGameState, 150);
-      return () => { if (gameLoopRef.current) clearInterval(gameLoopRef.current) };
+      updateGameState();
+    }
+    if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
     }
   }, [gameMode, gameRoom, updateGameState]);
+
+  useEffect(() => {
+    if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
+    }
+    
+    return () => {
+      if (gameLoopRef.current) {
+        cancelAnimationFrame(gameLoopRef.current);
+      }
+    };
+  }, [gameMode, gameRoom, gameLoop]);
   
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Prevent default browser behavior for arrow keys and WASD
@@ -486,6 +708,54 @@ const MultiplayerSnakeGame: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
+
+  // Memoized board cells for better performance
+  const boardCells = useMemo(() => {
+    if (!gameRoom) return [];
+    
+    const cells = [];
+    const foodPositions = new Set(gameRoom.food.map(f => `${f.x},${f.y}`));
+    
+    // Create position maps for all snakes
+    const snakeHeads = new Map<string, string>();
+    const snakeBodies = new Map<string, string>();
+    
+    for (const p of Object.values(gameRoom.players)) {
+      if (p.isAlive && p.positions.length > 0) {
+        const headPos = `${p.positions[0].x},${p.positions[0].y}`;
+        snakeHeads.set(headPos, p.color);
+        
+        for (let i = 1; i < p.positions.length; i++) {
+          const bodyPos = `${p.positions[i].x},${p.positions[i].y}`;
+          snakeBodies.set(bodyPos, p.color);
+        }
+      }
+    }
+    
+    for (let i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+      const x = i % BOARD_SIZE;
+      const y = Math.floor(i / BOARD_SIZE);
+      const posKey = `${x},${y}`;
+      
+      let cellClass = 'cell';
+      let cellStyle = {};
+
+      if (foodPositions.has(posKey)) {
+        cellClass += ' food';
+      } else if (snakeHeads.has(posKey)) {
+        cellClass += ' snake-head';
+        const color = snakeHeads.get(posKey)!;
+        cellStyle = { background: color, boxShadow: `0 0 8px ${color}` };
+      } else if (snakeBodies.has(posKey)) {
+        cellClass += ' snake-body';
+        const color = snakeBodies.get(posKey)!;
+        cellStyle = { background: color, opacity: 0.7 };
+      }
+
+      cells.push(<div key={i} className={cellClass} style={cellStyle}></div>);
+    }
+    return cells;
+  }, [gameRoom]);
   
   if (gameMode === 'menu') {
     return (
@@ -493,7 +763,7 @@ const MultiplayerSnakeGame: React.FC = () => {
             <div className="game-info">
                 <h1>Multiplayer Arena</h1>
             </div>
-            <div className="menu-container" style={{maxWidth: '400px'}}>
+            <div className="menu-container" style={{maxWidth: '450px'}}>
                 <input 
                   type="text" 
                   placeholder="Enter your name" 
@@ -523,7 +793,7 @@ const MultiplayerSnakeGame: React.FC = () => {
                   }}
                 >
                   <div className="button-title">🎯 Create Arena</div>
-                  <div className="button-description">Start a new multiplayer battle</div>
+                  <div className="button-description">Battle against smart AI opponents</div>
                 </button>
                 <div style={{margin: '20px 0', textAlign: 'center', color: '#ccc'}}>- OR -</div>
                 <input 
@@ -557,19 +827,36 @@ const MultiplayerSnakeGame: React.FC = () => {
                   <div className="button-description">Enter an existing battle</div>
                 </button>
                 
+                <div style={{
+                  marginTop: '20px',
+                  padding: '15px',
+                  backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                  borderRadius: '8px',
+                  border: '1px solid #00ff88',
+                  fontSize: '14px',
+                  color: '#00ff88',
+                  textAlign: 'left'
+                }}>
+                  <strong>🤖 AI Opponents:</strong><br/>
+                  • <strong>Viper</strong>: Aggressive & smart<br/>
+                  • <strong>Python</strong>: Patient strategist<br/>
+                  • <strong>Cobra</strong>: Balanced fighter<br/>
+                  Each bot has randomized intelligence levels!
+                </div>
+                
                 {isMobile && (
                   <div style={{
-                    marginTop: '20px',
-                    padding: '15px',
-                    backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                    marginTop: '15px',
+                    padding: '12px',
+                    backgroundColor: 'rgba(255, 170, 0, 0.1)',
                     borderRadius: '8px',
-                    border: '1px solid #00ff88',
-                    fontSize: '14px',
-                    color: '#00ff88'
+                    border: '1px solid #ffaa00',
+                    fontSize: '13px',
+                    color: '#ffaa00'
                   }}>
-                    📱 Mobile Controls:<br/>
-                    • Swipe to move your snake<br/>
-                    • Tap for additional controls
+                    📱 <strong>Mobile Controls:</strong><br/>
+                    • Swipe to change direction<br/>
+                    • Responsive touch controls
                   </div>
                 )}
             </div>
@@ -596,7 +883,12 @@ const MultiplayerSnakeGame: React.FC = () => {
               .sort((a,b) => b.score - a.score)
               .map(p => (
               <div key={p.id} className={`player-score ${!p.isAlive ? 'dead' : ''}`} style={{color: p.color}}>
-                  {p.name}{p.isAI ? ' 🤖' : ''}: {p.score}
+                  {p.name}{p.isAI ? ' 🤖' : ' 👤'}: {p.score}
+                  {p.isAI && p.aiPersonality && (
+                    <span style={{fontSize: '0.8em', opacity: 0.7}}>
+                      {' '}({p.aiPersonality.description})
+                    </span>
+                  )}
               </div>
             ))}
           </div>
@@ -604,30 +896,7 @@ const MultiplayerSnakeGame: React.FC = () => {
       </div>
 
       <div className="game-board">
-        {gameRoom && Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, i) => {
-          const x = i % BOARD_SIZE;
-          const y = Math.floor(i / BOARD_SIZE);
-          let cellClass = 'cell';
-          let cellStyle = {};
-
-          const food = gameRoom.food.find(f => f.x === x && f.y === y);
-          if (food) cellClass += ' food';
-
-          for(const p of Object.values(gameRoom.players)) {
-              if (p.isAlive) {
-                  const isHead = p.positions[0].x === x && p.positions[0].y === y;
-                  const isBody = p.positions.some(pos => pos.x === x && pos.y === y);
-                  if (isHead) {
-                      cellClass += ' snake-head';
-                      cellStyle = { background: p.color, boxShadow: `0 0 8px ${p.color}`};
-                  } else if (isBody) {
-                      cellClass += ' snake-body';
-                      cellStyle = { background: p.color, opacity: 0.7 };
-                  }
-              }
-          }
-          return <div key={i} className={cellClass} style={cellStyle}></div>;
-        })}
+        {boardCells}
       </div>
         
       {gameRoom && gameRoom.gameState === 'finished' && (
@@ -640,7 +909,12 @@ const MultiplayerSnakeGame: React.FC = () => {
               .sort((a,b) => b.score - a.score)
               .map((p, index) => (
                 <div key={p.id} style={{color: p.color, marginBottom: '5px'}}>
-                  {index + 1}. {p.name}{p.isAI ? ' 🤖' : ''}: {p.score}
+                  {index + 1}. {p.name}{p.isAI ? ' 🤖' : ' 👤'}: {p.score}
+                  {p.isAI && p.aiPersonality && (
+                    <span style={{fontSize: '0.9em', opacity: 0.8}}>
+                      {' '}({p.aiPersonality.description})
+                    </span>
+                  )}
                 </div>
               ))
             }
@@ -651,13 +925,13 @@ const MultiplayerSnakeGame: React.FC = () => {
       <div className="controls">
         {isMobile ? (
           <>
-            <p>Controls: Swipe to move</p>
-            <p>Compete against AI bots for the highest score!</p>
+            <p>Controls: Swipe to move your snake</p>
+            <p>Survive and outscore the AI opponents!</p>
           </>
         ) : (
           <>
             <p>Controls: Arrow keys / WASD / Swipe</p>
-            <p>Compete against AI bots for the highest score!</p>
+            <p>Survive and outscore the AI opponents!</p>
           </>
         )}
       </div>
@@ -670,13 +944,13 @@ const MultiplayerSnakeGame: React.FC = () => {
             justifyContent: 'center',
             alignItems: 'center',
             gap: '10px',
-            marginTop: '10px',
-            padding: '10px',
+            padding: '8px 12px',
             backgroundColor: 'rgba(0, 0, 0, 0.7)',
             borderRadius: '8px',
-            border: '1px solid #00ff88'
+            border: '1px solid #00ff88',
+            fontSize: '13px'
           }}>
-            <span style={{color: '#00ff88', fontSize: '14px'}}>
+            <span style={{color: '#00ff88'}}>
               Direction: {direction === 'UP' ? '⬆️' : direction === 'DOWN' ? '⬇️' : 
                           direction === 'LEFT' ? '⬅️' : '➡️'} {direction}
             </span>

@@ -1,5 +1,5 @@
 // src/components/Game/SnakeGame.tsx
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import './SnakeGame.css';
 
 interface Position {
@@ -12,9 +12,9 @@ type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
 const BOARD_SIZE = 20;
 const INITIAL_SNAKE = [{ x: 10, y: 10 }];
 const INITIAL_DIRECTION: Direction = 'RIGHT';
-const INITIAL_SPEED = 200;
-const MIN_SPEED = 80;
-const SPEED_INCREMENT = 5;
+const INITIAL_SPEED = 180;
+const MIN_SPEED = 60;
+const SPEED_INCREMENT = 8;
 const SCORE_THRESHOLD = 50;
 
 const SnakeGame: React.FC = () => {
@@ -28,8 +28,14 @@ const SnakeGame: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [gameSpeed, setGameSpeed] = useState(INITIAL_SPEED);
   const [isMobile, setIsMobile] = useState(false);
+  
+  // Refs for performance optimization
   const gameContainerRef = useRef<HTMLDivElement>(null);
   const touchStartPos = useRef<{ x: number, y: number } | null>(null);
+  const gameLoopRef = useRef<number | null>(null);
+  const directionQueue = useRef<Direction[]>([]);
+  const lastMoveTime = useRef<number>(0);
+  const lastDirection = useRef<Direction>(INITIAL_DIRECTION);
 
   // Detect mobile device
   useEffect(() => {
@@ -56,8 +62,8 @@ const SnakeGame: React.FC = () => {
   }, [score, highScore]);
 
   const generateFood = useCallback((currentSnake: Position[]) => {
+    const occupiedCells = new Set(currentSnake.map(pos => `${pos.x},${pos.y}`));
     let newFood: Position;
-    let foodOnSnake: boolean;
     let attempts = 0;
 
     do {
@@ -65,16 +71,8 @@ const SnakeGame: React.FC = () => {
         x: Math.floor(Math.random() * BOARD_SIZE),
         y: Math.floor(Math.random() * BOARD_SIZE),
       };
-      
-      foodOnSnake = false;
-      for (const segment of currentSnake) {
-        if (segment.x === newFood.x && segment.y === newFood.y) {
-          foodOnSnake = true;
-          break;
-        }
-      }
       attempts++;
-    } while (foodOnSnake && attempts < 100);
+    } while (occupiedCells.has(`${newFood.x},${newFood.y}`) && attempts < 100);
 
     return newFood;
   }, []);
@@ -92,28 +90,49 @@ const SnakeGame: React.FC = () => {
     setGameSpeed(calculateSpeed(score));
   }, [score, calculateSpeed]);
 
+  // Optimized direction queue processing
+  const processDirectionQueue = useCallback(() => {
+    if (directionQueue.current.length > 0) {
+      const nextDirection = directionQueue.current.shift()!;
+      const opposites: { [key in Direction]: Direction } = {
+        'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT'
+      };
+      
+      if (opposites[lastDirection.current] !== nextDirection) {
+        setDirection(nextDirection);
+        lastDirection.current = nextDirection;
+      }
+    }
+  }, []);
+
   const moveSnake = useCallback(() => {
     if (gameOver || !gameStarted || isPaused) return;
+
+    const now = performance.now();
+    if (now - lastMoveTime.current < gameSpeed) return;
+    
+    lastMoveTime.current = now;
+    processDirectionQueue();
 
     setSnake(currentSnake => {
       const newSnake = [...currentSnake];
       const head = { ...newSnake[0] };
 
-      // Calculate new head position
-      switch (direction) {
+      // Calculate new head position based on current direction
+      switch (lastDirection.current) {
         case 'UP': head.y -= 1; break;
         case 'DOWN': head.y += 1; break;
         case 'LEFT': head.x -= 1; break;
         case 'RIGHT': head.x += 1; break;
       }
 
-      // Check wall collisions first
+      // Check wall collisions
       if (head.x < 0 || head.x >= BOARD_SIZE || head.y < 0 || head.y >= BOARD_SIZE) {
         setGameOver(true);
         return currentSnake;
       }
 
-      // Check self collision (excluding current head position)
+      // Check self collision
       const bodyCollision = currentSnake.some(segment => segment.x === head.x && segment.y === head.y);
       if (bodyCollision) {
         setGameOver(true);
@@ -133,22 +152,26 @@ const SnakeGame: React.FC = () => {
 
       return newSnake;
     });
-  }, [direction, food.x, food.y, gameOver, gameStarted, isPaused, generateFood]);
+  }, [direction, food.x, food.y, gameOver, gameStarted, isPaused, generateFood, gameSpeed, processDirectionQueue]);
 
   const resetGame = useCallback(() => {
     setSnake(INITIAL_SNAKE);
     setFood(generateFood(INITIAL_SNAKE));
     setDirection(INITIAL_DIRECTION);
+    lastDirection.current = INITIAL_DIRECTION;
     setGameOver(false);
     setScore(0);
     setGameSpeed(INITIAL_SPEED);
     setIsPaused(false);
     setGameStarted(true);
+    directionQueue.current = [];
+    lastMoveTime.current = 0;
   }, [generateFood]);
 
   const startGame = useCallback(() => {
     if (!gameStarted && !gameOver) {
       setGameStarted(true);
+      lastMoveTime.current = performance.now();
     } else if (gameOver) {
       resetGame();
     }
@@ -156,9 +179,28 @@ const SnakeGame: React.FC = () => {
 
   const togglePause = useCallback(() => {
     if (gameStarted && !gameOver) {
-      setIsPaused(prev => !prev);
+      setIsPaused(prev => {
+        if (!prev) {
+          // Pausing - reset move timer
+          lastMoveTime.current = 0;
+        } else {
+          // Unpausing - reset move timer to current time
+          lastMoveTime.current = performance.now();
+        }
+        return !prev;
+      });
     }
   }, [gameStarted, gameOver]);
+
+  // Optimized direction handling with queue
+  const queueDirection = useCallback((newDirection: Direction) => {
+    if (gameStarted && !gameOver && !isPaused) {
+      // Limit queue size to prevent lag
+      if (directionQueue.current.length < 2) {
+        directionQueue.current.push(newDirection);
+      }
+    }
+  }, [gameStarted, gameOver, isPaused]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Prevent default browser behavior for arrow keys and WASD
@@ -190,15 +232,14 @@ const SnakeGame: React.FC = () => {
 
     if (isPaused) return;
 
-    let newDirection = direction;
+    // Queue direction changes instead of setting immediately
     switch (e.key) {
-      case 'ArrowUp': case 'w': case 'W': if (direction !== 'DOWN') newDirection = 'UP'; break;
-      case 'ArrowDown': case 's': case 'S': if (direction !== 'UP') newDirection = 'DOWN'; break;
-      case 'ArrowLeft': case 'a': case 'A': if (direction !== 'RIGHT') newDirection = 'LEFT'; break;
-      case 'ArrowRight': case 'd': case 'D': if (direction !== 'LEFT') newDirection = 'RIGHT'; break;
+      case 'ArrowUp': case 'w': case 'W': queueDirection('UP'); break;
+      case 'ArrowDown': case 's': case 'S': queueDirection('DOWN'); break;
+      case 'ArrowLeft': case 'a': case 'A': queueDirection('LEFT'); break;
+      case 'ArrowRight': case 'd': case 'D': queueDirection('RIGHT'); break;
     }
-    setDirection(newDirection);
-  }, [direction, gameOver, gameStarted, isPaused, togglePause, resetGame, startGame]);
+  }, [gameOver, gameStarted, isPaused, togglePause, resetGame, startGame, queueDirection]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
@@ -211,11 +252,10 @@ const SnakeGame: React.FC = () => {
 
     const deltaX = e.changedTouches[0].clientX - touchStartPos.current.x;
     const deltaY = e.changedTouches[0].clientY - touchStartPos.current.y;
-    const minSwipeDistance = 30; // Minimum distance for a swipe
+    const minSwipeDistance = 30;
 
     // Check if this is a tap (small movement)
     if (Math.abs(deltaX) < minSwipeDistance && Math.abs(deltaY) < minSwipeDistance) {
-      // Handle tap
       if (!gameStarted && !gameOver) {
         startGame();
       } else if (gameOver) {
@@ -231,23 +271,23 @@ const SnakeGame: React.FC = () => {
     if (gameStarted && !gameOver && !isPaused) {
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
         // Horizontal swipe
-        if (deltaX > minSwipeDistance && direction !== 'LEFT') {
-          setDirection('RIGHT');
-        } else if (deltaX < -minSwipeDistance && direction !== 'RIGHT') {
-          setDirection('LEFT');
+        if (deltaX > minSwipeDistance) {
+          queueDirection('RIGHT');
+        } else if (deltaX < -minSwipeDistance) {
+          queueDirection('LEFT');
         }
       } else {
         // Vertical swipe
-        if (deltaY > minSwipeDistance && direction !== 'UP') {
-          setDirection('DOWN');
-        } else if (deltaY < -minSwipeDistance && direction !== 'DOWN') {
-          setDirection('UP');
+        if (deltaY > minSwipeDistance) {
+          queueDirection('DOWN');
+        } else if (deltaY < -minSwipeDistance) {
+          queueDirection('UP');
         }
       }
     }
     
     touchStartPos.current = null;
-  }, [direction, gameStarted, gameOver, isPaused, startGame, resetGame, togglePause]);
+  }, [gameStarted, gameOver, isPaused, startGame, resetGame, togglePause, queueDirection]);
 
   const handleBoardClick = useCallback(() => {
     if (!gameStarted && !gameOver) {
@@ -257,47 +297,68 @@ const SnakeGame: React.FC = () => {
     }
   }, [gameStarted, gameOver, startGame, resetGame]);
 
+  // High-performance game loop using requestAnimationFrame
+  const gameLoop = useCallback(() => {
+    if (gameStarted && !gameOver && !isPaused) {
+      moveSnake();
+    }
+    if (gameStarted && !gameOver) {
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
+    }
+  }, [gameStarted, gameOver, isPaused, moveSnake]);
+
   useEffect(() => {
-    const gameInterval = setInterval(moveSnake, gameSpeed);
-    return () => clearInterval(gameInterval);
-  }, [moveSnake, gameSpeed]);
+    if (gameStarted && !gameOver) {
+      gameLoopRef.current = requestAnimationFrame(gameLoop);
+    }
+    
+    return () => {
+      if (gameLoopRef.current) {
+        cancelAnimationFrame(gameLoopRef.current);
+      }
+    };
+  }, [gameStarted, gameOver, gameLoop]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  // Auto-start for mobile devices to avoid space bar requirement
+  // Auto-start for mobile devices
   useEffect(() => {
     if (isMobile && !gameStarted && !gameOver) {
-      // Add a small delay to prevent immediate auto-start
       const timer = setTimeout(() => {
         if (!gameStarted && !gameOver) {
           setGameStarted(true);
+          lastMoveTime.current = performance.now();
         }
       }, 1000);
       return () => clearTimeout(timer);
     }
   }, [isMobile, gameStarted, gameOver]);
 
-  const renderCell = useCallback((x: number, y: number) => {
-    const isSnake = snake.some(segment => segment.x === x && segment.y === y);
-    const isHead = snake[0]?.x === x && snake[0]?.y === y;
-    const isFood = food.x === x && food.y === y;
+  // Memoized board cells for better performance
+  const boardCells = useMemo(() => {
+    const cells = [];
+    const snakePositions = new Set(snake.map(pos => `${pos.x},${pos.y}`));
+    const headPosition = snake.length > 0 ? `${snake[0].x},${snake[0].y}` : '';
+    const foodPosition = `${food.x},${food.y}`;
+    
+    for (let i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+      const x = i % BOARD_SIZE;
+      const y = Math.floor(i / BOARD_SIZE);
+      const posKey = `${x},${y}`;
+      
+      let className = 'cell';
+      if (posKey === foodPosition) className += ' food';
+      if (snakePositions.has(posKey)) {
+        className += posKey === headPosition ? ' snake-head' : ' snake-body';
+      }
 
-    let className = 'cell';
-    if (isSnake) className += isHead ? ' snake-head' : ' snake-body';
-    if (isFood) className += ' food';
-
-    return <div key={`${x}-${y}`} className={className}></div>;
+      cells.push(<div key={i} className={className}></div>);
+    }
+    return cells;
   }, [snake, food]);
-
-  const cells = [];
-  for (let i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
-    const x = i % BOARD_SIZE;
-    const y = Math.floor(i / BOARD_SIZE);
-    cells.push(renderCell(x, y));
-  }
   
   return (
     <div
@@ -326,7 +387,7 @@ const SnakeGame: React.FC = () => {
         onClick={!gameStarted || gameOver ? handleBoardClick : undefined}
         style={{cursor: (!gameStarted || gameOver) ? 'pointer' : 'default'}}
       >
-        {cells}
+        {boardCells}
       </div>
 
       {!gameStarted && !gameOver && (
