@@ -1,12 +1,8 @@
 // src/components/Game/MultiplayerSnakeGame.tsx
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { doc, setDoc, updateDoc, onSnapshot, deleteDoc } from 'firebase/firestore';
+import { db } from '../../services/firebase';
 import './SnakeGame.css';
-
-// MOCKING FIREBASE for demonstration since I can't access a real database.
-const db = {}; 
-const doc = (...args: any[]) => ({});
-const setDoc = async (...args: any[]) => {};
-const updateDoc = async (...args: any[]) => {};
 
 interface Position { x: number; y: number; }
 type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
@@ -38,6 +34,8 @@ interface GameRoom {
   food: Position[];
   gameState: 'waiting' | 'playing' | 'finished';
   maxPlayers: number;
+  createdAt?: number;
+  winner?: string;
 }
 
 const BOARD_SIZE = 25;
@@ -96,6 +94,7 @@ const MultiplayerSnakeGame: React.FC = () => {
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [direction, setDirection] = useState<Direction>('RIGHT');
   const [isMobile, setIsMobile] = useState(false);
+  const [isHost, setIsHost] = useState(false);
 
   // Performance optimization refs
   const gameLoopRef = useRef<number | null>(null);
@@ -104,6 +103,7 @@ const MultiplayerSnakeGame: React.FC = () => {
   const lastProcessedDirection = useRef<Direction>('RIGHT');
   const lastMoveTime = useRef<number>(0);
   const lastPlayerDirectionChange = useRef<number>(0);
+  const roomListenerRef = useRef<(() => void) | null>(null);
 
   // Detect mobile device
   useEffect(() => {
@@ -113,6 +113,18 @@ const MultiplayerSnakeGame: React.FC = () => {
     checkMobile();
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (roomListenerRef.current) {
+        roomListenerRef.current();
+      }
+      if (gameLoopRef.current) {
+        cancelAnimationFrame(gameLoopRef.current);
+      }
+    };
   }, []);
 
   // Helper function to check if direction change is valid
@@ -222,6 +234,46 @@ const MultiplayerSnakeGame: React.FC = () => {
     }
     
     return snake;
+  }, []);
+
+  // Helper function to get next position based on direction
+  const getNextPosition = useCallback((currentPos: Position, direction: Direction): Position => {
+    const newPos = { ...currentPos };
+    switch (direction) {
+      case 'UP': newPos.y -= 1; break;
+      case 'DOWN': newPos.y += 1; break;
+      case 'LEFT': newPos.x -= 1; break;
+      case 'RIGHT': newPos.x += 1; break;
+    }
+    return newPos;
+  }, []);
+
+  // Helper function to check if position is valid
+  const isValidPosition = useCallback((pos: Position): boolean => {
+    return pos.x >= 0 && pos.x < BOARD_SIZE && pos.y >= 0 && pos.y < BOARD_SIZE;
+  }, []);
+
+  // Helper function to calculate risk
+  const calculateRisk = useCallback((foodPos: Position, occupied: Set<string>, dangerous: Set<string>): number => {
+    let risk = 0;
+    
+    // Check surrounding positions for danger
+    for (let dx = -1; dx <= 1; dx++) {
+      for (let dy = -1; dy <= 1; dy++) {
+        const checkPos = `${foodPos.x + dx},${foodPos.y + dy}`;
+        if (occupied.has(checkPos)) risk += 1;
+        if (dangerous.has(checkPos)) risk += 0.5;
+      }
+    }
+    
+    // Check distance to walls
+    const wallDistance = Math.min(
+      foodPos.x, BOARD_SIZE - 1 - foodPos.x, 
+      foodPos.y, BOARD_SIZE - 1 - foodPos.y
+    );
+    if (wallDistance < 2) risk += 2;
+    
+    return risk;
   }, []);
 
   // Enhanced AI logic with personality-based decision making
@@ -392,45 +444,6 @@ const MultiplayerSnakeGame: React.FC = () => {
 
     return bestDirection;
   }, [calculateRisk, getNextPosition, isValidPosition]);
-
-  // Helper functions
-  const isValidPosition = useCallback((pos: Position): boolean => {
-    return pos.x >= 0 && pos.x < BOARD_SIZE && pos.y >= 0 && pos.y < BOARD_SIZE;
-  }, []);
-
-  const calculateRisk = useCallback((foodPos: Position, occupied: Set<string>, dangerous: Set<string>): number => {
-    let risk = 0;
-    
-    // Check surrounding positions for danger
-    for (let dx = -1; dx <= 1; dx++) {
-      for (let dy = -1; dy <= 1; dy++) {
-        const checkPos = `${foodPos.x + dx},${foodPos.y + dy}`;
-        if (occupied.has(checkPos)) risk += 1;
-        if (dangerous.has(checkPos)) risk += 0.5;
-      }
-    }
-    
-    // Check distance to walls
-    const wallDistance = Math.min(
-      foodPos.x, BOARD_SIZE - 1 - foodPos.x, 
-      foodPos.y, BOARD_SIZE - 1 - foodPos.y
-    );
-    if (wallDistance < 2) risk += 2;
-    
-    return risk;
-  }, []);
-
-  // Helper function to get next position based on direction
-  const getNextPosition = useCallback((currentPos: Position, direction: Direction): Position => {
-    const newPos = { ...currentPos };
-    switch (direction) {
-      case 'UP': newPos.y -= 1; break;
-      case 'DOWN': newPos.y += 1; break;
-      case 'LEFT': newPos.x -= 1; break;
-      case 'RIGHT': newPos.x += 1; break;
-    }
-    return newPos;
-  }, []);
   
   const createRoom = async () => {
     if (!playerName.trim()) return alert("Please enter your name!");
@@ -450,36 +463,72 @@ const MultiplayerSnakeGame: React.FC = () => {
       food: generateFood(Object.values(players)),
       gameState: 'playing',
       maxPlayers: MAX_PLAYERS,
+      createdAt: Date.now()
     };
     
     try {
-        await setDoc(doc(db, 'gameRooms', newRoomCode), newRoom);
-        setRoomCode(newRoomCode);
-        setGameRoom(newRoom);
-        setGameMode('playing');
-        // Reset direction tracking for new game
-        directionQueue.current = [];
-        lastProcessedDirection.current = 'RIGHT';
-        lastMoveTime.current = performance.now();
-        lastPlayerDirectionChange.current = 0;
-    } catch(e) { console.error("Failed to create room:", e)}
+      await setDoc(doc(db, 'gameRooms', newRoomCode), newRoom);
+      setRoomCode(newRoomCode);
+      setGameRoom(newRoom);
+      setGameMode('playing');
+      setIsHost(true);
+      // Reset direction tracking for new game
+      directionQueue.current = [];
+      lastProcessedDirection.current = 'RIGHT';
+      lastMoveTime.current = performance.now();
+      lastPlayerDirectionChange.current = 0;
+      
+      // Listen to room updates
+      const unsubscribe = onSnapshot(doc(db, 'gameRooms', newRoomCode), (doc) => {
+        if (doc.exists()) {
+          const updatedRoom = doc.data() as GameRoom;
+          setGameRoom(updatedRoom);
+        }
+      });
+      roomListenerRef.current = unsubscribe;
+    } catch(e) { 
+      console.error("Failed to create room:", e);
+      alert("Failed to create room. Please try again.");
+    }
   };
   
   const joinRoom = async () => {
-    alert("Joining rooms requires a full Firebase backend. Please use 'Create Arena' for this demo.");
+    if (!playerName.trim() || !roomCode.trim()) {
+      return alert("Please enter your name and room code!");
+    }
+    
+    try {
+      // For demo purposes, joining doesn't actually connect to Firebase
+      // In a real implementation, you would:
+      // 1. Check if room exists
+      // 2. Add player to room
+      // 3. Listen to room updates
+      alert("Joining rooms requires a full Firebase backend implementation. Please use 'Create Arena' for this demo.");
+    } catch(e) {
+      console.error("Failed to join room:", e);
+      alert("Failed to join room. Please check the room code and try again.");
+    }
   };
 
-  const endGame = useCallback(() => {
-    if (!gameRoom) return;
-    const alivePlayers = Object.values(gameRoom.players).filter(p => p.isAlive);
+  const endGame = useCallback(async () => {
+    if (!gameRoom || !isHost) return;
+    
     const winner = Object.values(gameRoom.players).reduce((a, b) => a.score > b.score ? a : b);
     
-    setGameRoom(prev => prev ? { ...prev, gameState: 'finished' } : null);
-    updateDoc(doc(db, 'gameRooms', gameRoom.id), { gameState: 'finished', winner: winner.id });
-  }, [gameRoom]);
+    setGameRoom(prev => prev ? { ...prev, gameState: 'finished', winner: winner.id } : null);
+    
+    try {
+      await updateDoc(doc(db, 'gameRooms', gameRoom.id), { 
+        gameState: 'finished', 
+        winner: winner.id 
+      });
+    } catch(e) {
+      console.error("Failed to update game state:", e);
+    }
+  }, [gameRoom, isHost]);
 
   const updateGameState = useCallback(() => {
-    if (!gameRoom || gameRoom.gameState !== 'playing') return;
+    if (!gameRoom || gameRoom.gameState !== 'playing' || !isHost) return;
 
     const now = performance.now();
     if (now - lastMoveTime.current < GAME_SPEED) return;
@@ -511,8 +560,10 @@ const MultiplayerSnakeGame: React.FC = () => {
           if (newDirection !== p.direction) {
             p.lastDirectionChange = now;
           }
-        } else {
+        } else if (p.id === playerId) {
           newDirection = lastProcessedDirection.current;
+        } else {
+          newDirection = p.direction;
         }
         
         const head = { ...p.positions[0] };
@@ -540,12 +591,10 @@ const MultiplayerSnakeGame: React.FC = () => {
         if (newHead.x < 0 || newHead.x >= BOARD_SIZE || 
             newHead.y < 0 || newHead.y >= BOARD_SIZE) {
           newSnake.isAlive = false;
-          console.log(`${newSnake.name} hit wall at ${newHead.x},${newHead.y}`);
         }
         // Check for body collisions
         else if (snakeBodies.has(`${newHead.x},${newHead.y}`)) {
           newSnake.isAlive = false;
-          console.log(`${newSnake.name} hit body at ${newHead.x},${newHead.y}`);
         }
         // Check for head-to-head collisions
         else {
@@ -555,7 +604,6 @@ const MultiplayerSnakeGame: React.FC = () => {
           
           if (headsAtSamePosition.length > 0) {
             newSnake.isAlive = false; // Head-on collision
-            console.log(`${newSnake.name} head-to-head collision at ${newHead.x},${newHead.y}`);
           }
         }
 
@@ -569,7 +617,6 @@ const MultiplayerSnakeGame: React.FC = () => {
             newSnake.score += 10;
             newFood.splice(foodIndex, 1);
             foodEaten = true;
-            console.log(`${newSnake.name} ate food, score: ${newSnake.score}`);
           } else {
             newSnake.positions.pop(); // Remove tail if no food eaten
           }
@@ -595,7 +642,15 @@ const MultiplayerSnakeGame: React.FC = () => {
   
       return { ...currentRoom, players: updatedPlayers, food: newFood };
     });
-  }, [gameRoom, getAIDirection, processDirectionQueue, generateFood, endGame, getNextPosition]);
+    
+    // Sync to Firebase periodically
+    if (isHost && gameRoom) {
+      updateDoc(doc(db, 'gameRooms', gameRoom.id), {
+        players: gameRoom.players,
+        food: gameRoom.food
+      }).catch(e => console.error("Failed to sync game state:", e));
+    }
+  }, [gameRoom, getAIDirection, processDirectionQueue, generateFood, endGame, getNextPosition, isHost, playerId]);
 
   // Timer
   useEffect(() => {
@@ -708,6 +763,28 @@ const MultiplayerSnakeGame: React.FC = () => {
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
+
+  // Cleanup game room when leaving
+  const cleanupRoom = useCallback(async () => {
+    if (roomCode && isHost) {
+      try {
+        await deleteDoc(doc(db, 'gameRooms', roomCode));
+      } catch(e) {
+        console.error("Failed to cleanup room:", e);
+      }
+    }
+    if (roomListenerRef.current) {
+      roomListenerRef.current();
+      roomListenerRef.current = null;
+    }
+  }, [roomCode, isHost]);
+
+  // Cleanup on component unmount or when going back to menu
+  useEffect(() => {
+    return () => {
+      cleanupRoom();
+    };
+  }, [cleanupRoom]);
 
   // Memoized board cells for better performance
   const boardCells = useMemo(() => {
@@ -902,7 +979,7 @@ const MultiplayerSnakeGame: React.FC = () => {
       {gameRoom && gameRoom.gameState === 'finished' && (
         <div className="game-message">
           <h2>Arena Complete!</h2>
-          <p>Winner: {gameRoom.players[Object.values(gameRoom.players).reduce((a,b) => a.score > b.score ? a:b).id]?.name}</p>
+          <p>Winner: {gameRoom.players[gameRoom.winner || '']?.name || 'Unknown'}</p>
           <p>Final Scores:</p>
           <div style={{textAlign: 'left', marginTop: '10px'}}>
             {Object.values(gameRoom.players)

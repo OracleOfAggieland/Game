@@ -10,12 +10,13 @@ interface Position {
 type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
 
 const BOARD_SIZE = 20;
-const INITIAL_SNAKE = [{ x: 10, y: 10 }];
+const INITIAL_SNAKE: Position[] = [{ x: 10, y: 10 }];
 const INITIAL_DIRECTION: Direction = 'RIGHT';
 const INITIAL_SPEED = 180;
 const MIN_SPEED = 60;
 const SPEED_INCREMENT = 8;
 const SCORE_THRESHOLD = 50;
+const MIN_DIRECTION_CHANGE_INTERVAL = 50; // Minimum ms between direction changes
 
 const SnakeGame: React.FC = () => {
   const [snake, setSnake] = useState<Position[]>(INITIAL_SNAKE);
@@ -36,6 +37,7 @@ const SnakeGame: React.FC = () => {
   const directionQueue = useRef<Direction[]>([]);
   const lastMoveTime = useRef<number>(0);
   const lastDirection = useRef<Direction>(INITIAL_DIRECTION);
+  const lastDirectionChange = useRef<number>(0);
 
   // Detect mobile device
   useEffect(() => {
@@ -47,6 +49,7 @@ const SnakeGame: React.FC = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Load high score from localStorage
   useEffect(() => {
     const savedHighScore = localStorage.getItem('snakeHighScore');
     if (savedHighScore) {
@@ -54,6 +57,7 @@ const SnakeGame: React.FC = () => {
     }
   }, []);
 
+  // Save high score to localStorage
   useEffect(() => {
     if (score > highScore) {
       setHighScore(score);
@@ -61,7 +65,7 @@ const SnakeGame: React.FC = () => {
     }
   }, [score, highScore]);
 
-  const generateFood = useCallback((currentSnake: Position[]) => {
+  const generateFood = useCallback((currentSnake: Position[]): Position => {
     const occupiedCells = new Set(currentSnake.map(pos => `${pos.x},${pos.y}`));
     let newFood: Position;
     let attempts = 0;
@@ -77,33 +81,45 @@ const SnakeGame: React.FC = () => {
     return newFood;
   }, []);
 
+  // Initialize food position
   useEffect(() => {
     setFood(generateFood(INITIAL_SNAKE));
   }, [generateFood]);
 
-  const calculateSpeed = useCallback((currentScore: number) => {
+  const calculateSpeed = useCallback((currentScore: number): number => {
     const speedReduction = Math.floor(currentScore / SCORE_THRESHOLD) * SPEED_INCREMENT;
     return Math.max(MIN_SPEED, INITIAL_SPEED - speedReduction);
   }, []);
   
+  // Update game speed based on score
   useEffect(() => {
     setGameSpeed(calculateSpeed(score));
   }, [score, calculateSpeed]);
 
-  // Optimized direction queue processing
+  // Helper function to check if direction change is valid
+  const isValidDirectionChange = useCallback((currentDir: Direction, newDir: Direction): boolean => {
+    const opposites: { [key in Direction]: Direction } = {
+      'UP': 'DOWN',
+      'DOWN': 'UP',
+      'LEFT': 'RIGHT',
+      'RIGHT': 'LEFT'
+    };
+    return opposites[currentDir] !== newDir;
+  }, []);
+
+  // Optimized direction queue processing with timing control
   const processDirectionQueue = useCallback(() => {
-    if (directionQueue.current.length > 0) {
+    const now = performance.now();
+    if (directionQueue.current.length > 0 && now - lastDirectionChange.current > MIN_DIRECTION_CHANGE_INTERVAL) {
       const nextDirection = directionQueue.current.shift()!;
-      const opposites: { [key in Direction]: Direction } = {
-        'UP': 'DOWN', 'DOWN': 'UP', 'LEFT': 'RIGHT', 'RIGHT': 'LEFT'
-      };
       
-      if (opposites[lastDirection.current] !== nextDirection) {
+      if (isValidDirectionChange(lastDirection.current, nextDirection)) {
         setDirection(nextDirection);
         lastDirection.current = nextDirection;
+        lastDirectionChange.current = now;
       }
     }
-  }, []);
+  }, [isValidDirectionChange]);
 
   const moveSnake = useCallback(() => {
     if (gameOver || !gameStarted || isPaused) return;
@@ -165,7 +181,8 @@ const SnakeGame: React.FC = () => {
     setIsPaused(false);
     setGameStarted(true);
     directionQueue.current = [];
-    lastMoveTime.current = 0;
+    lastMoveTime.current = performance.now();
+    lastDirectionChange.current = 0;
   }, [generateFood]);
 
   const startGame = useCallback(() => {
@@ -195,12 +212,24 @@ const SnakeGame: React.FC = () => {
   // Optimized direction handling with queue
   const queueDirection = useCallback((newDirection: Direction) => {
     if (gameStarted && !gameOver && !isPaused) {
-      // Limit queue size to prevent lag
-      if (directionQueue.current.length < 2) {
-        directionQueue.current.push(newDirection);
+      // Get the most recent direction (either from queue or current direction)
+      const currentEffectiveDirection = directionQueue.current.length > 0 
+        ? directionQueue.current[directionQueue.current.length - 1] 
+        : lastDirection.current;
+      
+      // Only allow valid direction changes
+      if (isValidDirectionChange(currentEffectiveDirection, newDirection)) {
+        // Only add to queue if it's different from the last queued direction
+        if (directionQueue.current.length === 0 || 
+            directionQueue.current[directionQueue.current.length - 1] !== newDirection) {
+          // Limit queue size to prevent lag
+          if (directionQueue.current.length < 2) {
+            directionQueue.current.push(newDirection);
+          }
+        }
       }
     }
-  }, [gameStarted, gameOver, isPaused]);
+  }, [gameStarted, gameOver, isPaused, isValidDirectionChange]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Prevent default browser behavior for arrow keys and WASD
@@ -377,6 +406,7 @@ const SnakeGame: React.FC = () => {
           {gameStarted && !gameOver && (
             <div className="game-stats">
               <div className="length">Length: {snake.length}</div>
+              <div className="speed">Speed: {Math.round((INITIAL_SPEED - gameSpeed + SPEED_INCREMENT) / SPEED_INCREMENT)}</div>
             </div>
           )}
         </div>
