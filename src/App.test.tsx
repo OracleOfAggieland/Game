@@ -1,17 +1,8 @@
-// src/App.tsx
 import React from 'react';
-import { AuthProvider } from './contexts/AuthContext';
-import SnakeGame from './components/Game/SnakeGame';
-import './App.css';
+import { render, screen } from '@testing-library/react';
+import App from './App';
 
-function App() {
-  return (
-    <AuthProvider>
-      <div className="App">
-        <SnakeGame />
-      </div>
-    </AuthProvider>
-  );
-}
-
-export default App;
+test('renders game menu', () => {
+  render(<App />);
+  expect(screen.getByText(/snake game/i)).toBeInTheDocument();
+});

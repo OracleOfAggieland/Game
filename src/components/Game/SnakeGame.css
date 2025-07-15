@@ -118,9 +118,14 @@
   box-shadow: 0 0 20px rgba(0, 255, 136, 0.4), inset 0 0 15px rgba(0, 255, 136, 0.2);
   touch-action: none;
   z-index: 1;
-  /* Ensure board is properly sized on mobile */
+  /* Ensure board is properly sized and contained */
   max-width: 95vw;
   max-height: 60vh;
+  position: relative;
+  overflow: hidden;
+  /* Ensure exact grid sizing */
+  width: calc(var(--cell-size) * var(--board-size) + var(--gap-size) * (var(--board-size) - 1) + 20px);
+  height: calc(var(--cell-size) * var(--board-size) + var(--gap-size) * (var(--board-size) - 1) + 20px);
 }
 
 .cell {
@@ -301,9 +306,18 @@
   }
   
   .game-board {
-    max-width: 95vw;
+    max-width: 90vw;
     max-height: 50vh;
     padding: 8px;
+    /* Recalculate dimensions for mobile */
+    width: min(
+      calc(var(--cell-size) * var(--board-size) + var(--gap-size) * (var(--board-size) - 1) + 16px),
+      90vw
+    );
+    height: min(
+      calc(var(--cell-size) * var(--board-size) + var(--gap-size) * (var(--board-size) - 1) + 16px),
+      50vh
+    );
   }
   
   .score-container,
@@ -347,6 +361,15 @@
   .game-board {
     max-height: 45vh;
     padding: 5px;
+    /* Ensure proper sizing on very small screens */
+    width: min(
+      calc(var(--cell-size) * var(--board-size) + var(--gap-size) * (var(--board-size) - 1) + 10px),
+      95vw
+    );
+    height: min(
+      calc(var(--cell-size) * var(--board-size) + var(--gap-size) * (var(--board-size) - 1) + 10px),
+      45vh
+    );
   }
   
   .score, .high-score, .time {

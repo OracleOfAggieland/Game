@@ -99,6 +99,7 @@ const SnakeGame: React.FC = () => {
       const newSnake = [...currentSnake];
       const head = { ...newSnake[0] };
 
+      // Calculate new head position
       switch (direction) {
         case 'UP': head.y -= 1; break;
         case 'DOWN': head.y += 1; break;
@@ -106,14 +107,23 @@ const SnakeGame: React.FC = () => {
         case 'RIGHT': head.x += 1; break;
       }
 
-      if (head.x < 0 || head.x >= BOARD_SIZE || head.y < 0 || head.y >= BOARD_SIZE || 
-          newSnake.some(segment => segment.x === head.x && segment.y === head.y)) {
+      // Check wall collisions first
+      if (head.x < 0 || head.x >= BOARD_SIZE || head.y < 0 || head.y >= BOARD_SIZE) {
         setGameOver(true);
         return currentSnake;
       }
 
+      // Check self collision (excluding current head position)
+      const bodyCollision = currentSnake.some(segment => segment.x === head.x && segment.y === head.y);
+      if (bodyCollision) {
+        setGameOver(true);
+        return currentSnake;
+      }
+
+      // Move snake
       newSnake.unshift(head);
 
+      // Check food collision
       if (head.x === food.x && head.y === food.y) {
         setScore(prev => prev + 10);
         setFood(generateFood(newSnake));

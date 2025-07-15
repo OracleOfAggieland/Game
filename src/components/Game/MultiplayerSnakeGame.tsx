@@ -53,6 +53,8 @@ const MultiplayerSnakeGame: React.FC = () => {
 
   const gameLoopRef = useRef<number | null>(null);
   const touchStartPos = useRef<{ x: number, y: number } | null>(null);
+  const directionQueue = useRef<Direction[]>([]);
+  const lastProcessedDirection = useRef<Direction>('RIGHT');
 
   // Detect mobile device
   useEffect(() => {
@@ -63,6 +65,39 @@ const MultiplayerSnakeGame: React.FC = () => {
     window.addEventListener('resize', checkMobile);
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
+
+  // Helper function to check if direction change is valid
+  const isValidDirectionChange = useCallback((currentDir: Direction, newDir: Direction): boolean => {
+    const opposites: { [key in Direction]: Direction } = {
+      'UP': 'DOWN',
+      'DOWN': 'UP',
+      'LEFT': 'RIGHT',
+      'RIGHT': 'LEFT'
+    };
+    return opposites[currentDir] !== newDir;
+  }, []);
+
+  // Queue direction changes to prevent rapid direction reversals
+  const queueDirection = useCallback((newDirection: Direction) => {
+    if (gameMode !== 'playing' || gameRoom?.gameState !== 'playing') return;
+    
+    // Get the most recent direction (either from queue or current direction)
+    const currentEffectiveDirection = directionQueue.current.length > 0 
+      ? directionQueue.current[directionQueue.current.length - 1] 
+      : lastProcessedDirection.current;
+    
+    // Only allow valid direction changes
+    if (isValidDirectionChange(currentEffectiveDirection, newDirection)) {
+      // Only add to queue if it's different from the last queued direction
+      if (directionQueue.current.length === 0 || 
+          directionQueue.current[directionQueue.current.length - 1] !== newDirection) {
+        // Limit queue size to prevent too many direction changes
+        if (directionQueue.current.length < 2) {
+          directionQueue.current.push(newDirection);
+        }
+      }
+    }
+  }, [gameMode, gameRoom, isValidDirectionChange]);
 
   const generateFood = (snakes: Snake[]): Position[] => {
     const occupied = new Set(snakes.flatMap(s => s.positions.map(p => `${p.x},${p.y}`)));
@@ -219,6 +254,9 @@ const MultiplayerSnakeGame: React.FC = () => {
         setRoomCode(newRoomCode);
         setGameRoom(newRoom); // Set room locally for mocked version
         setGameMode('playing');
+        // Reset direction tracking for new game
+        directionQueue.current = [];
+        lastProcessedDirection.current = 'RIGHT';
     } catch(e) { console.error("Failed to create room:", e)}
   };
   
@@ -240,6 +278,17 @@ const MultiplayerSnakeGame: React.FC = () => {
     setGameRoom(currentRoom => {
       if (!currentRoom) return null;
       
+      // Process queued direction changes for human player
+      if (directionQueue.current.length > 0) {
+        const nextDirection = directionQueue.current.shift()!;
+        if (isValidDirectionChange(lastProcessedDirection.current, nextDirection)) {
+          setDirection(nextDirection);
+          lastProcessedDirection.current = nextDirection;
+        }
+      } else {
+        lastProcessedDirection.current = direction;
+      }
+      
       const updatedPlayers: { [key: string]: Snake } = {};
       let newFood = [...currentRoom.food];
       let foodEaten = false;
@@ -253,12 +302,12 @@ const MultiplayerSnakeGame: React.FC = () => {
           continue;
         }
         
-        // Use AI logic for bots, player input for human
+        // Use AI logic for bots, processed direction for human
         let newDirection: Direction;
         if (p.isAI) {
           newDirection = getAIDirection(p, newFood, Object.values(currentRoom.players));
         } else {
-          newDirection = direction;
+          newDirection = lastProcessedDirection.current;
         }
         
         let head = { ...p.positions[0] };
@@ -288,13 +337,17 @@ const MultiplayerSnakeGame: React.FC = () => {
         const { newHead, newDirection } = nextMoves[p.id];
         let newSnake = { ...p };
         
-        // Check for wall collisions and body collisions
+        // Check for wall collisions first
         if (newHead.x < 0 || newHead.x >= BOARD_SIZE || 
-            newHead.y < 0 || newHead.y >= BOARD_SIZE || 
-            snakeBodies.has(`${newHead.x},${newHead.y}`)) {
+            newHead.y < 0 || newHead.y >= BOARD_SIZE) {
           newSnake.isAlive = false;
-        } else {
-          // Check for head-to-head collisions
+        }
+        // Check for body collisions (excluding heads for now)
+        else if (snakeBodies.has(`${newHead.x},${newHead.y}`)) {
+          newSnake.isAlive = false;
+        }
+        // Check for head-to-head collisions
+        else {
           const headsAtSamePosition = Object.values(nextMoves).filter(move => 
             move.newHead.x === newHead.x && move.newHead.y === newHead.y
           );
@@ -334,7 +387,7 @@ const MultiplayerSnakeGame: React.FC = () => {
       // For the mock, we set it directly.
       return { ...currentRoom, players: updatedPlayers, food: newFood };
     });
-  }, [gameRoom, direction, getAIDirection]);
+  }, [gameRoom, direction, getAIDirection, isValidDirectionChange]);
 
   // Timer
   useEffect(() => {
@@ -369,31 +422,30 @@ const MultiplayerSnakeGame: React.FC = () => {
     
     if (gameMode !== 'playing' || gameRoom?.gameState !== 'playing') return;
     
-    let newDirection = direction;
+    // Use the queueDirection function instead of directly setting direction
     switch(e.key) {
         case 'ArrowUp': 
         case 'w': 
         case 'W':
-          if(direction !== 'DOWN') newDirection = 'UP'; 
+          queueDirection('UP');
           break;
         case 'ArrowDown': 
         case 's': 
         case 'S':
-          if(direction !== 'UP') newDirection = 'DOWN'; 
+          queueDirection('DOWN');
           break;
         case 'ArrowLeft': 
         case 'a': 
         case 'A':
-          if(direction !== 'RIGHT') newDirection = 'LEFT'; 
+          queueDirection('LEFT');
           break;
         case 'ArrowRight': 
         case 'd': 
         case 'D':
-          if(direction !== 'LEFT') newDirection = 'RIGHT'; 
+          queueDirection('RIGHT');
           break;
     }
-    setDirection(newDirection);
-  }, [direction, gameMode, gameRoom]);
+  }, [gameMode, gameRoom, queueDirection]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
@@ -412,23 +464,23 @@ const MultiplayerSnakeGame: React.FC = () => {
     if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
         // Horizontal swipe
-        if (deltaX > minSwipeDistance && direction !== 'LEFT') {
-          setDirection('RIGHT');
-        } else if (deltaX < -minSwipeDistance && direction !== 'RIGHT') {
-          setDirection('LEFT');
+        if (deltaX > minSwipeDistance) {
+          queueDirection('RIGHT');
+        } else if (deltaX < -minSwipeDistance) {
+          queueDirection('LEFT');
         }
       } else {
         // Vertical swipe
-        if (deltaY > minSwipeDistance && direction !== 'UP') {
-          setDirection('DOWN');
-        } else if (deltaY < -minSwipeDistance && direction !== 'DOWN') {
-          setDirection('UP');
+        if (deltaY > minSwipeDistance) {
+          queueDirection('DOWN');
+        } else if (deltaY < -minSwipeDistance) {
+          queueDirection('UP');
         }
       }
     }
     
     touchStartPos.current = null;
-  }, [direction, gameMode, gameRoom]);
+  }, [gameMode, gameRoom, queueDirection]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
