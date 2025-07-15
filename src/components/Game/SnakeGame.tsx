@@ -9,18 +9,13 @@ interface Position {
 
 type Direction = 'UP' | 'DOWN' | 'LEFT' | 'RIGHT';
 
-interface TouchStartPos {
-  x: number;
-  y: number;
-}
-
 const BOARD_SIZE = 20;
 const INITIAL_SNAKE = [{ x: 10, y: 10 }];
 const INITIAL_DIRECTION: Direction = 'RIGHT';
 const INITIAL_SPEED = 200;
 const MIN_SPEED = 80;
 const SPEED_INCREMENT = 5;
-const SCORE_THRESHOLD = 50; // Increase speed every 50 points
+const SCORE_THRESHOLD = 50;
 
 const SnakeGame: React.FC = () => {
   const [snake, setSnake] = useState<Position[]>(INITIAL_SNAKE);
@@ -33,9 +28,8 @@ const SnakeGame: React.FC = () => {
   const [isPaused, setIsPaused] = useState(false);
   const [gameSpeed, setGameSpeed] = useState(INITIAL_SPEED);
   const gameContainerRef = useRef<HTMLDivElement>(null);
-  const touchStartRef = useRef<TouchStartPos | null>(null);
+  const touchStartPos = useRef<{ x: number, y: number } | null>(null);
 
-  // Load high score from localStorage on component mount
   useEffect(() => {
     const savedHighScore = localStorage.getItem('snakeHighScore');
     if (savedHighScore) {
@@ -43,7 +37,6 @@ const SnakeGame: React.FC = () => {
     }
   }, []);
 
-  // Save high score to localStorage when it changes
   useEffect(() => {
     if (score > highScore) {
       setHighScore(score);
@@ -51,74 +44,30 @@ const SnakeGame: React.FC = () => {
     }
   }, [score, highScore]);
 
-  // Manage body class for preventing scroll
-  useEffect(() => {
-    if (gameStarted && !gameOver) {
-      document.body.classList.add('game-active');
-    } else {
-      document.body.classList.remove('game-active');
-    }
-
-    // Cleanup on unmount
-    return () => {
-      document.body.classList.remove('game-active');
-    };
-  }, [gameStarted, gameOver]);
-
-  // Generate random food position that doesn't overlap with snake
   const generateFood = useCallback((currentSnake: Position[]) => {
     let newFood: Position;
-    let attempts = 0;
-    const maxAttempts = BOARD_SIZE * BOARD_SIZE;
-
     do {
       newFood = {
         x: Math.floor(Math.random() * BOARD_SIZE),
         y: Math.floor(Math.random() * BOARD_SIZE)
       };
-      attempts++;
-    } while (
-      attempts < maxAttempts &&
-      currentSnake.some(segment => segment.x === newFood.x && segment.y === newFood.y)
-    );
-
+    } while (currentSnake.some(segment => segment.x === newFood.x && segment.y === newFood.y));
     return newFood;
   }, []);
 
-  // Initialize food position that doesn't overlap with initial snake
   useEffect(() => {
     setFood(generateFood(INITIAL_SNAKE));
   }, [generateFood]);
 
-  // Calculate game speed based on score
   const calculateSpeed = useCallback((currentScore: number) => {
     const speedReduction = Math.floor(currentScore / SCORE_THRESHOLD) * SPEED_INCREMENT;
     return Math.max(MIN_SPEED, INITIAL_SPEED - speedReduction);
   }, []);
-
-  // Update game speed when score changes
+  
   useEffect(() => {
     setGameSpeed(calculateSpeed(score));
   }, [score, calculateSpeed]);
 
-  // Check collision with walls or self
-  const checkCollision = (head: Position, snakeBody: Position[]) => {
-    // Wall collision
-    if (head.x < 0 || head.x >= BOARD_SIZE || head.y < 0 || head.y >= BOARD_SIZE) {
-      return true;
-    }
-    
-    // Self collision
-    for (const segment of snakeBody) {
-      if (head.x === segment.x && head.y === segment.y) {
-        return true;
-      }
-    }
-    
-    return false;
-  };
-
-  // Move snake
   const moveSnake = useCallback(() => {
     if (gameOver || !gameStarted || isPaused) return;
 
@@ -126,43 +75,32 @@ const SnakeGame: React.FC = () => {
       const newSnake = [...currentSnake];
       const head = { ...newSnake[0] };
 
-      // Move head based on direction
       switch (direction) {
-        case 'UP':
-          head.y -= 1;
-          break;
-        case 'DOWN':
-          head.y += 1;
-          break;
-        case 'LEFT':
-          head.x -= 1;
-          break;
-        case 'RIGHT':
-          head.x += 1;
-          break;
+        case 'UP': head.y -= 1; break;
+        case 'DOWN': head.y += 1; break;
+        case 'LEFT': head.x -= 1; break;
+        case 'RIGHT': head.x += 1; break;
       }
 
-      // Check collision
-      if (checkCollision(head, newSnake)) {
+      if (head.x < 0 || head.x >= BOARD_SIZE || head.y < 0 || head.y >= BOARD_SIZE || 
+          newSnake.some(segment => segment.x === head.x && segment.y === head.y)) {
         setGameOver(true);
         return currentSnake;
       }
 
       newSnake.unshift(head);
 
-      // Check if food is eaten
       if (head.x === food.x && head.y === food.y) {
         setScore(prev => prev + 10);
         setFood(generateFood(newSnake));
       } else {
-        newSnake.pop(); // Remove tail if no food eaten
+        newSnake.pop();
       }
 
       return newSnake;
     });
-  }, [direction, food, gameOver, gameStarted, isPaused, generateFood]);
+  }, [direction, food.x, food.y, gameOver, gameStarted, isPaused, generateFood]);
 
-  // Reset game
   const resetGame = useCallback(() => {
     setSnake(INITIAL_SNAKE);
     setFood(generateFood(INITIAL_SNAKE));
@@ -171,129 +109,79 @@ const SnakeGame: React.FC = () => {
     setScore(0);
     setGameSpeed(INITIAL_SPEED);
     setIsPaused(false);
+    setGameStarted(true);
   }, [generateFood]);
 
-  // Toggle pause
   const togglePause = useCallback(() => {
     if (gameStarted && !gameOver) {
       setIsPaused(prev => !prev);
     }
   }, [gameStarted, gameOver]);
 
-  // Handle keyboard input
-  const handleKeyPress = useCallback((e: KeyboardEvent) => {
-    // Prevent default behavior for arrow keys and space to stop page scrolling
-    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'KeyP'].includes(e.code)) {
-      e.preventDefault();
+  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+    e.preventDefault();
+
+    if (!gameStarted) {
+        if (e.code === 'Space' || e.key === ' ') {
+            setGameStarted(true);
+        }
+        return;
     }
 
-    // Handle pause/resume
-    if (e.code === 'KeyP') {
+    if (gameOver) {
+        if (e.code === 'Space' || e.key === ' ') {
+            resetGame();
+        }
+        return;
+    }
+
+    if (e.code === 'KeyP' || (e.code === 'Space' && gameStarted)) {
       togglePause();
       return;
     }
 
-    if (!gameStarted) {
-      if (e.code === 'Space') {
-        setGameStarted(true);
-      }
-      return;
-    }
+    if (isPaused) return;
 
-    if (gameOver) {
-      if (e.code === 'Space') {
-        resetGame();
-        setGameStarted(true);
-      }
-      return;
+    let newDirection = direction;
+    switch (e.key) {
+      case 'ArrowUp': case 'w': if (direction !== 'DOWN') newDirection = 'UP'; break;
+      case 'ArrowDown': case 's': if (direction !== 'UP') newDirection = 'DOWN'; break;
+      case 'ArrowLeft': case 'a': if (direction !== 'RIGHT') newDirection = 'LEFT'; break;
+      case 'ArrowRight': case 'd': if (direction !== 'LEFT') newDirection = 'RIGHT'; break;
     }
-
-    if (isPaused) {
-      if (e.code === 'Space') {
-        setIsPaused(false);
-      }
-      return;
-    }
-
-    // Handle movement
-    switch (e.code) {
-      case 'ArrowUp':
-      case 'KeyW':
-        if (direction !== 'DOWN') setDirection('UP');
-        break;
-      case 'ArrowDown':
-      case 'KeyS':
-        if (direction !== 'UP') setDirection('DOWN');
-        break;
-      case 'ArrowLeft':
-      case 'KeyA':
-        if (direction !== 'RIGHT') setDirection('LEFT');
-        break;
-      case 'ArrowRight':
-      case 'KeyD':
-        if (direction !== 'LEFT') setDirection('RIGHT');
-        break;
-      case 'Space':
-        setIsPaused(true);
-        break;
-    }
+    setDirection(newDirection);
   }, [direction, gameOver, gameStarted, isPaused, togglePause, resetGame]);
 
-  // Touch controls
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
-    const touch = e.touches[0];
-    touchStartRef.current = {
-      x: touch.clientX,
-      y: touch.clientY
-    };
+      touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
   }, []);
 
   const handleTouchEnd = useCallback((e: React.TouchEvent) => {
-    if (!touchStartRef.current) return;
-    if (!gameStarted || gameOver || isPaused) return;
+      if (!touchStartPos.current) return;
 
-    const touch = e.changedTouches[0];
-    const deltaX = touch.clientX - touchStartRef.current.x;
-    const deltaY = touch.clientY - touchStartRef.current.y;
-    const minSwipeDistance = 30;
+      const deltaX = e.changedTouches[0].clientX - touchStartPos.current.x;
+      const deltaY = e.changedTouches[0].clientY - touchStartPos.current.y;
 
-    // Determine swipe direction
-    if (Math.abs(deltaX) > Math.abs(deltaY)) {
-      // Horizontal swipe
-      if (Math.abs(deltaX) > minSwipeDistance) {
-        if (deltaX > 0 && direction !== 'LEFT') {
-          setDirection('RIGHT');
-        } else if (deltaX < 0 && direction !== 'RIGHT') {
-          setDirection('LEFT');
-        }
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+          if (deltaX > 0 && direction !== 'LEFT') setDirection('RIGHT');
+          else if (deltaX < 0 && direction !== 'RIGHT') setDirection('LEFT');
+      } else {
+          if (deltaY > 0 && direction !== 'UP') setDirection('DOWN');
+          else if (deltaY < 0 && direction !== 'DOWN') setDirection('UP');
       }
-    } else {
-      // Vertical swipe
-      if (Math.abs(deltaY) > minSwipeDistance) {
-        if (deltaY > 0 && direction !== 'UP') {
-          setDirection('DOWN');
-        } else if (deltaY < 0 && direction !== 'DOWN') {
-          setDirection('UP');
-        }
-      }
-    }
+      touchStartPos.current = null;
+  }, [direction]);
 
-    touchStartRef.current = null;
-  }, [direction, gameStarted, gameOver, isPaused]);
-
-  // Game loop
   useEffect(() => {
     const gameInterval = setInterval(moveSnake, gameSpeed);
     return () => clearInterval(gameInterval);
   }, [moveSnake, gameSpeed]);
 
-  // Keyboard event listener
   useEffect(() => {
-    window.addEventListener('keydown', handleKeyPress);
-    return () => window.removeEventListener('keydown', handleKeyPress);
-  }, [handleKeyPress]);
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleKeyDown]);
 
-  // Render cell
   const renderCell = (x: number, y: number) => {
     const isSnake = snake.some(segment => segment.x === x && segment.y === y);
     const isHead = snake[0]?.x === x && snake[0]?.y === y;
@@ -305,55 +193,44 @@ const SnakeGame: React.FC = () => {
 
     return <div key={`${x}-${y}`} className={className}></div>;
   };
-
-  // Create game board
-  const createBoard = () => {
-    const board = [];
-    for (let y = 0; y < BOARD_SIZE; y++) {
-      for (let x = 0; x < BOARD_SIZE; x++) {
-        board.push(renderCell(x, y));
-      }
-    }
-    return board;
-  };
-
+  
   return (
-    <div 
-      className="snake-game" 
+    <div
+      className="snake-game"
       ref={gameContainerRef}
       tabIndex={0}
       onTouchStart={handleTouchStart}
       onTouchEnd={handleTouchEnd}
+      style={{'--board-size': BOARD_SIZE} as React.CSSProperties}
     >
       <div className="game-info">
-        <h1>Snake Game</h1>
+        <h1>Classic Snake</h1>
         <div className="score-container">
           <div className="score">Score: {score}</div>
           <div className="high-score">High Score: {highScore}</div>
           {gameStarted && !gameOver && (
             <div className="game-stats">
-              <div className="speed">Speed: {Math.round((INITIAL_SPEED - gameSpeed + SPEED_INCREMENT) / SPEED_INCREMENT)}</div>
               <div className="length">Length: {snake.length}</div>
             </div>
           )}
         </div>
       </div>
-      
-      <div className="game-board">
-        {createBoard()}
-      </div>
+
+      <div className="game-board">{Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, i) =>
+        renderCell(i % BOARD_SIZE, Math.floor(i / BOARD_SIZE))
+      )}</div>
 
       {!gameStarted && !gameOver && (
         <div className="game-message">
+          <h2>Get Ready!</h2>
+          <p>Use arrow keys, WASD, or swipe to move.</p>
           <p>Press SPACE to start!</p>
-          <p>Use arrow keys, WASD, or swipe to move</p>
-          <p>Press P to pause during game</p>
         </div>
       )}
 
-      {isPaused && gameStarted && !gameOver && (
+      {isPaused && (
         <div className="game-message">
-          <h2>Paused</h2>
+          <h2 style={{color: '#88ccff'}}>Paused</h2>
           <p>Press SPACE or P to resume</p>
         </div>
       )}
@@ -362,7 +239,7 @@ const SnakeGame: React.FC = () => {
         <div className="game-message">
           <h2>Game Over!</h2>
           <p>Final Score: {score}</p>
-          {score === highScore && score > 0 && (
+          {score > 0 && score === highScore && (
             <p className="new-high-score">🎉 New High Score! 🎉</p>
           )}
           <p>Press SPACE to play again</p>
@@ -370,13 +247,8 @@ const SnakeGame: React.FC = () => {
       )}
 
       <div className="controls">
-        <p>Controls: Arrow keys, WASD, or swipe to move</p>
-        <p>P to pause • SPACE to pause/resume</p>
-        {gameStarted && !gameOver && !isPaused && (
-          <p className="speed-indicator">
-            Next speed increase at {Math.ceil(score / SCORE_THRESHOLD) * SCORE_THRESHOLD} points
-          </p>
-        )}
+        <p>Controls: Arrow keys / WASD / Swipe</p>
+        <p>P or SPACE to pause/resume</p>
       </div>
     </div>
   );

@@ -1,115 +1,155 @@
 /* src/components/Game/SnakeGame.css */
 .snake-game {
+  --board-size: 20; /* Default value, will be overridden by component */
+  --cell-size: clamp(12px, 4vw, 22px);
+  --board-dimension: calc(var(--cell-size) * var(--board-size));
+  --gap-size: 1px;
+
   display: flex;
   flex-direction: column;
   align-items: center;
   padding: 20px;
   font-family: 'Arial', sans-serif;
-  background-color: #1a1a2e;
+  background: radial-gradient(ellipse at bottom, #1b2735 0%, #090a0f 100%);
   color: #eee;
   min-height: 100vh;
+  width: 100%;
+  box-sizing: border-box;
   outline: none;
   user-select: none;
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.snake-game::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-image: linear-gradient(
+    rgba(255, 255, 255, 0.03) 1px,
+    transparent 1px
+  );
+  background-size: 1px 3px;
+  pointer-events: none;
+  z-index: 0;
+  opacity: 0.5;
 }
 
 .game-info {
   text-align: center;
   margin-bottom: 20px;
+  z-index: 1;
+  max-width: 90%;
 }
 
 .game-info h1 {
   margin: 0 0 15px 0;
   color: #00ff88;
-  text-shadow: 0 0 10px #00ff88;
-  font-size: 2.5em;
+  text-shadow: 0 0 10px #00ff88, 0 0 20px #00ff88, 0 0 30px #00ff88;
+  font-size: clamp(2rem, 8vw, 2.5rem);
 }
 
-.score-container {
+.score-container,
+.multiplayer-info {
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: 30px;
+  gap: 20px;
   flex-wrap: wrap;
   margin-bottom: 10px;
+  max-width: 100%;
 }
 
-.score, .high-score {
-  font-size: 24px;
+.score, .high-score, .time {
+  font-size: clamp(1rem, 4vw, 1.5rem);
   font-weight: bold;
 }
 
-.score {
+.score, .time {
   color: #ffaa00;
+  text-shadow: 0 0 5px #ffaa00;
 }
 
 .high-score {
   color: #ff6b6b;
+  text-shadow: 0 0 5px #ff6b6b;
 }
 
 .game-stats {
   display: flex;
   gap: 20px;
-  font-size: 18px;
+  font-size: clamp(0.9rem, 3vw, 1rem);
   color: #88ccff;
 }
 
-.speed, .length {
-  font-weight: bold;
+.player-scores {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    justify-content: center;
+    max-width: calc(var(--board-dimension) + 20px);
+}
+
+.player-score {
+    font-weight: bold;
+    font-size: clamp(0.7rem, 2vw, 0.9rem);
+    transition: opacity 0.3s ease;
+}
+
+.player-score.dead {
+    opacity: 0.4;
+    text-decoration: line-through;
 }
 
 .game-board {
   display: grid;
-  grid-template-columns: repeat(20, 20px);
-  grid-template-rows: repeat(20, 20px);
-  gap: 1px;
+  grid-template-columns: repeat(var(--board-size), var(--cell-size));
+  grid-template-rows: repeat(var(--board-size), var(--cell-size));
+  gap: var(--gap-size);
   background-color: #0d1420;
   border: 3px solid #00ff88;
   border-radius: 8px;
   padding: 10px;
-  box-shadow: 0 0 20px rgba(0, 255, 136, 0.3);
+  box-shadow: 0 0 20px rgba(0, 255, 136, 0.4), inset 0 0 15px rgba(0, 255, 136, 0.2);
   touch-action: none;
+  z-index: 1;
 }
 
 .cell {
-  width: 20px;
-  height: 20px;
+  width: var(--cell-size);
+  height: var(--cell-size);
   background-color: #16213e;
   border-radius: 2px;
   transition: all 0.1s ease;
 }
 
 .snake-head {
-  background-color: #00ff88 !important;
-  box-shadow: 0 0 8px #00ff88;
+  background: radial-gradient(circle, #fff, #00ff88);
+  box-shadow: 0 0 8px #00ff88, 0 0 12px #fff, inset 0 0 5px #fff;
   border-radius: 3px;
-  animation: pulse-head 1s infinite;
-}
-
-@keyframes pulse-head {
-  0% { transform: scale(1); box-shadow: 0 0 8px #00ff88; }
-  50% { transform: scale(1.05); box-shadow: 0 0 12px #00ff88; }
-  100% { transform: scale(1); box-shadow: 0 0 8px #00ff88; }
+  z-index: 10;
 }
 
 .snake-body {
-  background-color: #00cc66 !important;
+  background: #00cc66;
+  border: 1px solid #00ff88;
   border-radius: 2px;
 }
 
 .food {
-  background-color: #ff4444 !important;
+  background: radial-gradient(circle, #ffaaaa, #ff4444);
   border-radius: 50%;
-  box-shadow: 0 0 8px #ff4444;
-  animation: pulse-food 1s infinite;
+  box-shadow: 0 0 8px #ff4444, 0 0 12px #ff4444;
+  animation: pulse-food 1.5s infinite;
 }
 
 @keyframes pulse-food {
-  0% { transform: scale(1); box-shadow: 0 0 8px #ff4444; }
-  50% { transform: scale(1.1); box-shadow: 0 0 12px #ff4444; }
-  100% { transform: scale(1); box-shadow: 0 0 8px #ff4444; }
+  0% { transform: scale(0.95); box-shadow: 0 0 8px #ff4444; }
+  70% { transform: scale(1.1); box-shadow: 0 0 12px #ff4444; }
+  100% { transform: scale(0.95); box-shadow: 0 0 8px #ff4444; }
 }
 
 .game-message {
@@ -117,159 +157,47 @@
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background-color: rgba(0, 0, 0, 0.95);
-  padding: 30px;
+  background-color: rgba(0, 0, 0, 0.7);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  padding: clamp(20px, 5vw, 40px);
   border-radius: 15px;
   text-align: center;
   border: 2px solid #00ff88;
   box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
-  backdrop-filter: blur(10px);
   z-index: 1000;
+  width: 90%;
+  max-width: 450px;
 }
 
 .game-message h2 {
-  margin-top: 0;
+  margin: 0;
   text-shadow: 0 0 10px currentColor;
-  font-size: 2em;
-}
-
-.game-message h2:first-of-type {
+  font-size: clamp(1.5rem, 6vw, 2em);
   color: #ff4444;
 }
 
 .game-message p {
   margin: 10px 0;
-  font-size: 18px;
+  font-size: clamp(0.9rem, 3.5vw, 1.1rem);
 }
 
 .new-high-score {
   color: #ffaa00 !important;
   font-weight: bold;
-  font-size: 22px !important;
-  animation: celebration 2s infinite;
-}
-
-@keyframes celebration {
-  0%, 100% { transform: scale(1); }
-  25% { transform: scale(1.05); }
-  50% { transform: scale(1.1); }
-  75% { transform: scale(1.05); }
+  font-size: clamp(1rem, 4vw, 1.4rem) !important;
+  text-shadow: 0 0 8px #ffaa00;
 }
 
 .controls {
   margin-top: 20px;
   text-align: center;
-  opacity: 0.8;
-  max-width: 600px;
+  opacity: 0.6;
+  max-width: 90%;
+  z-index: 1;
 }
 
 .controls p {
   margin: 5px 0;
-  font-size: 14px;
-}
-
-.speed-indicator {
-  color: #88ccff !important;
-  font-weight: bold !important;
-  margin-top: 10px !important;
-}
-
-/* Prevent scrolling when game is active */
-body.game-active {
-  overflow: hidden;
-  position: fixed;
-  width: 100%;
-  height: 100%;
-}
-
-/* Ensure the game container can receive focus */
-.snake-game:focus {
-  outline: none;
-}
-
-/* Responsive design */
-@media (max-width: 600px) {
-  .snake-game {
-    padding: 10px;
-  }
-
-  .game-info h1 {
-    font-size: 2em;
-  }
-
-  .score-container {
-    gap: 15px;
-    flex-direction: column;
-  }
-
-  .score, .high-score {
-    font-size: 20px;
-  }
-
-  .game-stats {
-    gap: 15px;
-    font-size: 16px;
-    justify-content: center;
-  }
-
-  .game-board {
-    grid-template-columns: repeat(20, 15px);
-    grid-template-rows: repeat(20, 15px);
-    padding: 8px;
-  }
-  
-  .cell {
-    width: 15px;
-    height: 15px;
-  }
-
-  .game-message {
-    padding: 20px;
-    max-width: 90vw;
-  }
-
-  .game-message h2 {
-    font-size: 1.5em;
-  }
-
-  .game-message p {
-    font-size: 16px;
-  }
-
-  .controls {
-    max-width: 90vw;
-  }
-
-  .controls p {
-    font-size: 12px;
-  }
-}
-
-@media (max-width: 400px) {
-  .game-board {
-    grid-template-columns: repeat(20, 12px);
-    grid-template-rows: repeat(20, 12px);
-  }
-  
-  .cell {
-    width: 12px;
-    height: 12px;
-  }
-}
-
-/* Smooth transitions for responsive changes */
-.game-board, .cell {
-  transition: all 0.3s ease;
-}
-
-/* Touch feedback for mobile */
-@media (hover: none) and (pointer: coarse) {
-  .game-board {
-    border-color: #00ff88;
-    box-shadow: 0 0 15px rgba(0, 255, 136, 0.4);
-  }
-  
-  .snake-game {
-    touch-action: manipulation;
-  }
+  font-size: clamp(0.7rem, 2.5vw, 0.8rem);
 }
