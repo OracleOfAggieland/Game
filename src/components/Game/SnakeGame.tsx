@@ -21,7 +21,7 @@ const MIN_DIRECTION_CHANGE_INTERVAL = 50; // Minimum ms between direction change
 const SnakeGame: React.FC = () => {
   const [snake, setSnake] = useState<Position[]>(INITIAL_SNAKE);
   const [food, setFood] = useState<Position>({ x: 15, y: 15 });
-  const [direction, setDirection] = useState<Direction>(INITIAL_DIRECTION);
+  //const [direction, setDirection] = useState<Direction>(INITIAL_DIRECTION);
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
