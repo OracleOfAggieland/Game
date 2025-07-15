@@ -391,7 +391,7 @@ const MultiplayerSnakeGame: React.FC = () => {
     });
 
     return bestDirection;
-  }, []);
+  }, [calculateRisk, getNextPosition, isValidPosition]);
 
   // Helper functions
   const isValidPosition = useCallback((pos: Position): boolean => {

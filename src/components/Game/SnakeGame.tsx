@@ -152,7 +152,7 @@ const SnakeGame: React.FC = () => {
 
       return newSnake;
     });
-  }, [direction, food.x, food.y, gameOver, gameStarted, isPaused, generateFood, gameSpeed, processDirectionQueue]);
+  }, [food.x, food.y, gameOver, gameStarted, isPaused, generateFood, gameSpeed, processDirectionQueue]);
 
   const resetGame = useCallback(() => {
     setSnake(INITIAL_SNAKE);
