@@ -49,8 +49,20 @@ const MultiplayerSnakeGame: React.FC = () => {
   const [gameMode, setGameMode] = useState<'menu' | 'playing'>('menu');
   const [timeLeft, setTimeLeft] = useState(GAME_DURATION);
   const [direction, setDirection] = useState<Direction>('RIGHT');
+  const [isMobile, setIsMobile] = useState(false);
 
   const gameLoopRef = useRef<number | null>(null);
+  const touchStartPos = useRef<{ x: number, y: number } | null>(null);
+
+  // Detect mobile device
+  useEffect(() => {
+    const checkMobile = () => {
+      setIsMobile(window.innerWidth <= 768 || 'ontouchstart' in window);
+    };
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
 
   const generateFood = (snakes: Snake[]): Position[] => {
     const occupied = new Set(snakes.flatMap(s => s.positions.map(p => `${p.x},${p.y}`)));
@@ -355,27 +367,68 @@ const MultiplayerSnakeGame: React.FC = () => {
       e.preventDefault();
     }
     
+    if (gameMode !== 'playing' || gameRoom?.gameState !== 'playing') return;
+    
     let newDirection = direction;
     switch(e.key) {
         case 'ArrowUp': 
         case 'w': 
+        case 'W':
           if(direction !== 'DOWN') newDirection = 'UP'; 
           break;
         case 'ArrowDown': 
         case 's': 
+        case 'S':
           if(direction !== 'UP') newDirection = 'DOWN'; 
           break;
         case 'ArrowLeft': 
         case 'a': 
+        case 'A':
           if(direction !== 'RIGHT') newDirection = 'LEFT'; 
           break;
         case 'ArrowRight': 
         case 'd': 
+        case 'D':
           if(direction !== 'LEFT') newDirection = 'RIGHT'; 
           break;
     }
     setDirection(newDirection);
-  }, [direction]);
+  }, [direction, gameMode, gameRoom]);
+
+  const handleTouchStart = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    touchStartPos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  }, []);
+
+  const handleTouchEnd = useCallback((e: React.TouchEvent) => {
+    e.preventDefault();
+    if (!touchStartPos.current) return;
+
+    const deltaX = e.changedTouches[0].clientX - touchStartPos.current.x;
+    const deltaY = e.changedTouches[0].clientY - touchStartPos.current.y;
+    const minSwipeDistance = 30; // Minimum distance for a swipe
+
+    // Only handle swipes during active gameplay
+    if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
+      if (Math.abs(deltaX) > Math.abs(deltaY)) {
+        // Horizontal swipe
+        if (deltaX > minSwipeDistance && direction !== 'LEFT') {
+          setDirection('RIGHT');
+        } else if (deltaX < -minSwipeDistance && direction !== 'RIGHT') {
+          setDirection('LEFT');
+        }
+      } else {
+        // Vertical swipe
+        if (deltaY > minSwipeDistance && direction !== 'UP') {
+          setDirection('DOWN');
+        } else if (deltaY < -minSwipeDistance && direction !== 'DOWN') {
+          setDirection('UP');
+        }
+      }
+    }
+    
+    touchStartPos.current = null;
+  }, [direction, gameMode, gameRoom]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -396,21 +449,29 @@ const MultiplayerSnakeGame: React.FC = () => {
                   onChange={e => setPlayerName(e.target.value)} 
                   style={{
                     width: '100%', 
-                    padding: '10px', 
+                    padding: '12px', 
                     marginBottom: '15px',
                     border: '2px solid #00ff88',
                     borderRadius: '5px',
                     backgroundColor: '#16213e',
                     color: '#eee',
-                    fontSize: '16px'
+                    fontSize: '16px',
+                    boxSizing: 'border-box'
                   }}
                 />
                 <button 
                   onClick={createRoom} 
                   disabled={!playerName.trim()} 
                   className="menu-button"
+                  style={{
+                    padding: '15px 20px',
+                    fontSize: '16px',
+                    width: '100%',
+                    marginBottom: '20px'
+                  }}
                 >
-                  Create Arena
+                  <div className="button-title">🎯 Create Arena</div>
+                  <div className="button-description">Start a new multiplayer battle</div>
                 </button>
                 <div style={{margin: '20px 0', textAlign: 'center', color: '#ccc'}}>- OR -</div>
                 <input 
@@ -420,29 +481,57 @@ const MultiplayerSnakeGame: React.FC = () => {
                   onChange={e => setRoomCode(e.target.value.toUpperCase())} 
                   style={{
                     width: '100%', 
-                    padding: '10px', 
+                    padding: '12px', 
                     marginBottom: '15px',
                     border: '2px solid #00ff88',
                     borderRadius: '5px',
                     backgroundColor: '#16213e',
                     color: '#eee',
-                    fontSize: '16px'
+                    fontSize: '16px',
+                    boxSizing: 'border-box'
                   }}
                 />
                 <button 
                   onClick={joinRoom} 
                   disabled={!playerName.trim() || !roomCode.trim()} 
                   className="menu-button multiplayer"
+                  style={{
+                    padding: '15px 20px',
+                    fontSize: '16px',
+                    width: '100%'
+                  }}
                 >
-                  Join Arena
+                  <div className="button-title">⚔️ Join Arena</div>
+                  <div className="button-description">Enter an existing battle</div>
                 </button>
+                
+                {isMobile && (
+                  <div style={{
+                    marginTop: '20px',
+                    padding: '15px',
+                    backgroundColor: 'rgba(0, 255, 136, 0.1)',
+                    borderRadius: '8px',
+                    border: '1px solid #00ff88',
+                    fontSize: '14px',
+                    color: '#00ff88'
+                  }}>
+                    📱 Mobile Controls:<br/>
+                    • Swipe to move your snake<br/>
+                    • Tap for additional controls
+                  </div>
+                )}
             </div>
         </div>
     );
   }
   
   return (
-    <div className="snake-game" style={{ '--board-size': BOARD_SIZE } as React.CSSProperties}>
+    <div 
+      className="snake-game" 
+      style={{ '--board-size': BOARD_SIZE } as React.CSSProperties}
+      onTouchStart={handleTouchStart}
+      onTouchEnd={handleTouchEnd}
+    >
       <div className="game-info">
         <h1>Snake Arena</h1>
         <div className="multiplayer-info">
@@ -493,13 +582,55 @@ const MultiplayerSnakeGame: React.FC = () => {
         <div className="game-message">
           <h2>Arena Complete!</h2>
           <p>Winner: {gameRoom.players[Object.values(gameRoom.players).reduce((a,b) => a.score > b.score ? a:b).id]?.name}</p>
+          <p>Final Scores:</p>
+          <div style={{textAlign: 'left', marginTop: '10px'}}>
+            {Object.values(gameRoom.players)
+              .sort((a,b) => b.score - a.score)
+              .map((p, index) => (
+                <div key={p.id} style={{color: p.color, marginBottom: '5px'}}>
+                  {index + 1}. {p.name}{p.isAI ? ' 🤖' : ''}: {p.score}
+                </div>
+              ))
+            }
+          </div>
         </div>
       )}
       
       <div className="controls">
-        <p>Controls: Arrow keys / WASD</p>
-        <p>Compete against AI bots for the highest score!</p>
+        {isMobile ? (
+          <>
+            <p>Controls: Swipe to move</p>
+            <p>Compete against AI bots for the highest score!</p>
+          </>
+        ) : (
+          <>
+            <p>Controls: Arrow keys / WASD / Swipe</p>
+            <p>Compete against AI bots for the highest score!</p>
+          </>
+        )}
       </div>
+
+      {/* Mobile Direction Indicator */}
+      {isMobile && gameRoom && gameRoom.gameState === 'playing' && (
+        <div className="mobile-controls">
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            gap: '10px',
+            marginTop: '10px',
+            padding: '10px',
+            backgroundColor: 'rgba(0, 0, 0, 0.7)',
+            borderRadius: '8px',
+            border: '1px solid #00ff88'
+          }}>
+            <span style={{color: '#00ff88', fontSize: '14px'}}>
+              Direction: {direction === 'UP' ? '⬆️' : direction === 'DOWN' ? '⬇️' : 
+                          direction === 'LEFT' ? '⬅️' : '➡️'} {direction}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
