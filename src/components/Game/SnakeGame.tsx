@@ -44,23 +44,32 @@ const SnakeGame: React.FC = () => {
     }
   }, [score, highScore]);
 
-  const generateFood = useCallback((currentSnake: Position[]) => {
-    let attempts = 0;
-    let newFood: Position;
+  // src/components/Game/SnakeGame.tsx: Corrected Code
+const generateFood = useCallback((currentSnake: Position[]) => {
+  let newFood: Position;
+  let foodOnSnake: boolean;
+  let attempts = 0;
+
+  do {
+    newFood = {
+      x: Math.floor(Math.random() * BOARD_SIZE),
+      y: Math.floor(Math.random() * BOARD_SIZE),
+    };
     
-    do {
-      newFood = {
-        x: Math.floor(Math.random() * BOARD_SIZE),
-        y: Math.floor(Math.random() * BOARD_SIZE)
-      };
-      attempts++;
-    } while (
-      attempts < 100 && 
-      currentSnake.some(segment => segment.x === newFood.x && segment.y === newFood.y)
-    );
-    
-    return newFood;
-  }, []);
+    foodOnSnake = false;
+    for (const segment of currentSnake) {
+      if (segment.x === newFood.x && segment.y === newFood.y) {
+        foodOnSnake = true;
+        break;
+      }
+    }
+    attempts++;
+  } while (foodOnSnake && attempts < 100);
+
+  // If we couldn't find a free spot after 100 attempts, we might return the last position
+  // which could be on the snake. This is consistent with the original logic.
+  return newFood;
+}, []);
 
   useEffect(() => {
     setFood(generateFood(INITIAL_SNAKE));
