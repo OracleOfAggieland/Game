@@ -182,7 +182,8 @@ const SnakeGame: React.FC = () => {
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
-  const renderCell = (x: number, y: number) => {
+  // Fixed: Move renderCell outside of the loop to avoid the no-loop-func error
+  const renderCell = useCallback((x: number, y: number) => {
     const isSnake = snake.some(segment => segment.x === x && segment.y === y);
     const isHead = snake[0]?.x === x && snake[0]?.y === y;
     const isFood = food.x === x && food.y === y;
@@ -192,7 +193,15 @@ const SnakeGame: React.FC = () => {
     if (isFood) className += ' food';
 
     return <div key={`${x}-${y}`} className={className}></div>;
-  };
+  }, [snake, food]);
+
+  // Create cells array outside of render
+  const cells = [];
+  for (let i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+    const x = i % BOARD_SIZE;
+    const y = Math.floor(i / BOARD_SIZE);
+    cells.push(renderCell(x, y));
+  }
   
   return (
     <div
@@ -216,9 +225,7 @@ const SnakeGame: React.FC = () => {
         </div>
       </div>
 
-      <div className="game-board">{Array.from({ length: BOARD_SIZE * BOARD_SIZE }, (_, i) =>
-        renderCell(i % BOARD_SIZE, Math.floor(i / BOARD_SIZE))
-      )}</div>
+      <div className="game-board">{cells}</div>
 
       {!gameStarted && !gameOver && (
         <div className="game-message">
