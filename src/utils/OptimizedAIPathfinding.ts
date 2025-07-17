@@ -1,5 +1,5 @@
 // src/utils/OptimizedAIPathfinding.ts
-import { Position, Direction, AIPersonality } from '../types/GameEnhancements';
+import { Position, Direction, AIPersonality, Snake } from '../types/GameEnhancements';
 import { StateCache, CacheableSnake } from './StateCache';
 
 export interface PathfindingConfig {
@@ -16,6 +16,15 @@ export interface PathfindingContext {
   boardWidth: number;
   boardHeight: number;
   currentTick: number;
+}
+
+export interface GameState {
+  snakes: Snake[];
+  food: Position[];
+  bossSnakes: Snake[];
+  powerUps: Position[];
+  boardWidth?: number;
+  boardHeight?: number;
 }
 
 export class OptimizedAIPathfinding {
@@ -347,11 +356,11 @@ export class OptimizedAIPathfinding {
   }
 
   private cleanDirectionCache(currentTime: number): void {
-    for (const [key, cached] of this.directionCache) {
+    this.directionCache.forEach((cached, key) => {
       if (currentTime - cached.timestamp > this.cacheTTL * 2) {
         this.directionCache.delete(key);
       }
-    }
+    });
   }
 
   /**
@@ -379,4 +388,46 @@ export class OptimizedAIPathfinding {
   public updateConfig(newConfig: Partial<PathfindingConfig>): void {
     this.config = { ...this.config, ...newConfig };
   }
+  // ----- Static helper methods -----
+  private static _instance = new OptimizedAIPathfinding();
+
+  public static invalidateCache(): void {
+    this._instance.clearCaches();
+  }
+
+  public static getOptimizedDirection(
+    snake: Snake,
+    gameState: GameState,
+    tick: number
+  ): Direction {
+    const context: PathfindingContext = {
+      snakes: gameState.snakes as CacheableSnake[],
+      food: gameState.food,
+      boardWidth: gameState.boardWidth ?? 25,
+      boardHeight: gameState.boardHeight ?? 25,
+      currentTick: tick
+    };
+
+    return this._instance.calculateDirection(
+      { id: snake.id, positions: snake.positions, isAlive: snake.isAlive },
+      typeof snake.aiPersonality === 'object'
+        ? snake.aiPersonality
+        : { aggression: 0.5, intelligence: 0.5, patience: 0.5, name: 'AI' },
+      context
+    );
+  }
+
+  public static updatePerformanceMetrics(_frameTime: number): void {
+    // Placeholder for future performance tracking
+  }
+
+  public static getPerformanceMetrics() {
+    const stats = this._instance.getPerformanceStats();
+    return {
+      ...stats,
+      averageComplexity: 1,
+      calculationTime: 0
+    };
+  }
 }
+

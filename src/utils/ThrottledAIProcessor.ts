@@ -294,7 +294,10 @@ export class ThrottledAIProcessor {
     });
 
     // Select from highest priority group using round-robin
-    const highestPriority = Math.max(...priorityGroups.keys());
+    let highestPriority = -Infinity;
+    priorityGroups.forEach((_, p) => {
+      if (p > highestPriority) highestPriority = p;
+    });
     const highPriorityCalculations = priorityGroups.get(highestPriority)!;
     
     // Use round-robin within same priority level
