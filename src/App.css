@@ -113,25 +113,3 @@
 .feature-box li {
   margin-bottom: 5px;
 }
-
-.back-button {
-  position: fixed;
-  top: 20px;
-  left: 20px;
-  padding: 10px 15px;
-  background-color: rgba(0, 0, 0, 0.7);
-  color: #00ff88;
-  border: 2px solid #00ff88;
-  border-radius: 8px;
-  font-size: 14px;
-  font-weight: bold;
-  cursor: pointer;
-  z-index: 9999;
-  transition: all 0.3s ease;
-}
-
-.back-button:hover {
-  background-color: #00ff88;
-  color: black;
-  transform: scale(1.05);
-}

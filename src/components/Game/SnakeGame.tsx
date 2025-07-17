@@ -18,7 +18,11 @@ const SPEED_INCREMENT = 8;
 const SCORE_THRESHOLD = 50;
 const MIN_DIRECTION_CHANGE_INTERVAL = 50; // Minimum ms between direction changes
 
-const SnakeGame: React.FC = () => {
+interface SnakeGameProps {
+  onBack: () => void;
+}
+
+const SnakeGame: React.FC<SnakeGameProps> = ({ onBack }) => {
   const [snake, setSnake] = useState<Position[]>(INITIAL_SNAKE);
   const [food, setFood] = useState<Position>({ x: 15, y: 15 });
   const [, setDirection] = useState<Direction>(INITIAL_DIRECTION);
@@ -446,6 +450,9 @@ const SnakeGame: React.FC = () => {
           ) : (
             <p>Press SPACE or P to resume</p>
           )}
+          <button className="menu-button" onClick={onBack} style={{marginTop: '15px'}}>
+            ← Back to Menu
+          </button>
         </div>
       )}
 

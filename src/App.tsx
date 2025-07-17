@@ -14,7 +14,7 @@ function App() {
       <div className="menu-container">
         <h1>🐍 Snake Game 🐍</h1>
         <h2>Choose Your Arena</h2>
-        
+
         <button
           onClick={() => setGameMode('single')}
           className="menu-button"
@@ -22,7 +22,7 @@ function App() {
           <div className="button-title">🎯 Classic Mode</div>
           <div className="button-description">A timeless solo snake experience.</div>
         </button>
-        
+
         <button
           onClick={() => setGameMode('multiplayer')}
           className="menu-button multiplayer"
@@ -30,7 +30,7 @@ function App() {
           <div className="button-title">⚔️ Arena Mode</div>
           <div className="button-description">Battle players & AI in real-time.</div>
         </button>
-        
+
         <div className="feature-box">
           <h3>🔥 Arena Mode Features</h3>
           <ul>
@@ -44,21 +44,19 @@ function App() {
     </div>
   );
 
-  const renderBackButton = () => (
-    <button
-      onClick={() => setGameMode('menu')}
-      className="back-button"
-    >
-      ← Back to Menu
-    </button>
-  );
+  const handleBackToMenu = () => {
+    setGameMode('menu');
+  };
 
   return (
     <div className="App">
       {gameMode === 'menu' && renderModeSelector()}
-      {gameMode !== 'menu' && renderBackButton()}
-      {gameMode === 'single' && <SnakeGame />}
-      {gameMode === 'multiplayer' && <MultiplayerSnakeGame />}
+      {gameMode === 'single' && (
+        <SnakeGame onBack={handleBackToMenu} />
+      )}
+      {gameMode === 'multiplayer' && (
+        <MultiplayerSnakeGame onBack={handleBackToMenu} />
+      )}
     </div>
   );
 }

@@ -97,7 +97,11 @@ const AI_PERSONALITIES: AIPersonality[] = [
 
 const SNAKE_COLORS = ['#00ff88', '#ff4444', '#4444ff', '#ffaa00', '#ff44ff', '#44ffff'];
 
-const MultiplayerSnakeGame: React.FC = () => {
+interface MultiplayerSnakeGameProps {
+  onBack: () => void;
+}
+
+const MultiplayerSnakeGame: React.FC<MultiplayerSnakeGameProps> = ({ onBack }) => {
   const [gameRoom, setGameRoom] = useState<GameRoom | null>(null);
   const [playerId] = useState(`player_${Date.now()}`);
   const [playerName, setPlayerName] = useState('');
@@ -107,7 +111,7 @@ const MultiplayerSnakeGame: React.FC = () => {
   const [direction, setDirection] = useState<Direction>('RIGHT');
   const [isMobile, setIsMobile] = useState(false);
   const [isHost, setIsHost] = useState(false);
-
+  const [isPaused, setIsPaused] = useState(false);
   // Performance optimization refs
   const gameLoopRef = useRef<number | null>(null);
   const touchStartPos = useRef<{ x: number, y: number } | null>(null);
@@ -132,6 +136,13 @@ const MultiplayerSnakeGame: React.FC = () => {
 
   // Power-up system
   const powerUpManagerRef = useRef<PowerUpManager>(new PowerUpManager());
+
+  const togglePause = useCallback(() => {
+    if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
+      setIsPaused(prev => !prev);
+    }
+  }, [gameMode, gameRoom]);
+
 
   // Wave system
   const waveManagerRef = useRef<WaveManager>(new WaveManager());
@@ -190,6 +201,7 @@ const MultiplayerSnakeGame: React.FC = () => {
   // Queue direction changes to prevent rapid direction reversals
   const queueDirection = useCallback((newDirection: Direction) => {
     if (gameMode !== 'playing' || gameRoom?.gameState !== 'playing') return;
+    if (isPaused) return;
 
     // Get the most recent direction (either from queue or current direction)
     const currentEffectiveDirection = directionQueue.current.length > 0
@@ -938,7 +950,7 @@ const MultiplayerSnakeGame: React.FC = () => {
 
   // Timer
   useEffect(() => {
-    if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
+    if (gameMode === 'playing' && gameRoom?.gameState === 'playing' && !isPaused) {
       const timer = setInterval(() => {
         setTimeLeft(prev => {
           if (prev <= 1) {
@@ -951,18 +963,20 @@ const MultiplayerSnakeGame: React.FC = () => {
       }, 1000);
       return () => clearInterval(timer);
     }
-  }, [gameMode, gameRoom, endGame]);
+  }, [gameMode, gameRoom, endGame, isPaused]);
 
   // High-performance game loop using requestAnimationFrame
   const gameLoop = useCallback(() => {
-    if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
+    if (gameMode === 'playing' && gameRoom?.gameState === 'playing' && !isPaused) {
       updateGameState();
+    }
+    if (gameMode === 'playing' && gameRoom?.gameState === 'playing' && !isPaused) {
       gameLoopRef.current = requestAnimationFrame(gameLoop);
     }
-  }, [gameMode, gameRoom, updateGameState]);
+  }, [gameMode, gameRoom, updateGameState, isPaused]);
 
   useEffect(() => {
-    if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
+    if (gameMode === 'playing' && gameRoom?.gameState === 'playing' && !isPaused) {
       gameLoopRef.current = requestAnimationFrame(gameLoop);
     }
 
@@ -971,12 +985,18 @@ const MultiplayerSnakeGame: React.FC = () => {
         cancelAnimationFrame(gameLoopRef.current);
       }
     };
-  }, [gameMode, gameRoom?.gameState, gameLoop]);
+  }, [gameMode, gameRoom?.gameState, gameLoop, isPaused]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Prevent default browser behavior for arrow keys and WASD
     if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'w', 'a', 's', 'd'].includes(e.key)) {
       e.preventDefault();
+    }
+
+    if (e.code === 'KeyP' || e.code === 'Space') {
+      e.preventDefault();
+      togglePause();
+      return;
     }
 
     if (gameMode !== 'playing' || gameRoom?.gameState !== 'playing') return;
@@ -1004,7 +1024,7 @@ const MultiplayerSnakeGame: React.FC = () => {
         queueDirection('RIGHT');
         break;
     }
-  }, [gameMode, gameRoom, queueDirection]);
+  }, [gameMode, gameRoom, queueDirection, togglePause, isPaused]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
@@ -1019,8 +1039,12 @@ const MultiplayerSnakeGame: React.FC = () => {
     const deltaY = e.changedTouches[0].clientY - touchStartPos.current.y;
     const minSwipeDistance = 30; // Minimum distance for a swipe
 
-    // Only handle swipes during active gameplay
-    if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
+    // Tap to pause/resume
+    if (Math.abs(deltaX) < minSwipeDistance && Math.abs(deltaY) < minSwipeDistance) {
+      if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
+        togglePause();
+      }
+    } else if (gameMode === 'playing' && gameRoom?.gameState === 'playing') {
       if (Math.abs(deltaX) > Math.abs(deltaY)) {
         // Horizontal swipe
         if (deltaX > minSwipeDistance) {
@@ -1039,7 +1063,7 @@ const MultiplayerSnakeGame: React.FC = () => {
     }
 
     touchStartPos.current = null;
-  }, [gameMode, gameRoom, queueDirection]);
+  }, [gameMode, gameRoom, queueDirection, togglePause, isPaused]);
 
   useEffect(() => {
     window.addEventListener('keydown', handleKeyDown);
@@ -1067,6 +1091,12 @@ const MultiplayerSnakeGame: React.FC = () => {
       cleanupRoom();
     };
   }, [cleanupRoom]);
+
+  const handleBackToMenu = useCallback(() => {
+    cleanupRoom();
+    setGameMode('menu');
+    onBack();
+  }, [cleanupRoom, onBack]);
 
 
   if (gameMode === 'menu') {
@@ -1241,6 +1271,20 @@ const MultiplayerSnakeGame: React.FC = () => {
       {waveNotification && (
         <div className="wave-notification">
           <h2>{waveNotification}</h2>
+        </div>
+      )}
+
+      {isPaused && (
+        <div className="game-message">
+          <h2 style={{color: '#88ccff'}}>Paused</h2>
+          {isMobile ? (
+            <p>Tap to resume</p>
+          ) : (
+            <p>Press SPACE or P to resume</p>
+          )}
+          <button className="menu-button" onClick={handleBackToMenu} style={{marginTop: '15px'}}>
+            ← Back to Menu
+          </button>
         </div>
       )}
 
