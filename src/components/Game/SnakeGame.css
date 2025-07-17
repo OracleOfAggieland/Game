@@ -1125,3 +1125,68 @@ e Notification Styles */
     font-size: 10px;
   }
 }
+
+/* Obstacle Styles */
+.cell.obstacle {
+  transition: none;
+  position: relative;
+}
+
+/* Error Boundary Styles */
+.error-boundary {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(0, 0, 0, 0.95);
+  backdrop-filter: blur(10px);
+  border: 2px solid #ff4444;
+  border-radius: 15px;
+  padding: 30px;
+  text-align: center;
+  color: #eee;
+  z-index: 1000;
+  max-width: 90%;
+  max-height: 80%;
+  overflow-y: auto;
+}
+.food {
+  background: radial-gradient(circle, #ffaaaa, #ff4444);
+  border-radius: 50%;
+  box-shadow: 0 0 8px #ff4444, 0 0 12px #ff4444;
+  animation: pulse-food 1.5s infinite;
+  
+  /* Performance optimization for animation */
+  will-change: transform, box-shadow;
+}
+
+/* Obstacle Styles for Level 2 */
+.cell.obstacle {
+  transition: none;
+  position: relative;
+  border-radius: 2px;
+}
+
+/* Power-up cell display in grid */
+.cell.powerup {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.cell.powerup span {
+  pointer-events: none;
+  user-select: none;
+}
+.menu-button:hover {
+  background-color: #00ff88;
+  color: #111;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 20px rgba(0, 255, 136, 0.4);
+}
+
+.menu-button:active {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 15px rgba(0, 255, 136, 0.3);
+}
