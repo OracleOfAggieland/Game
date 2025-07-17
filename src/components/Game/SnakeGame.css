@@ -58,8 +58,7 @@
   font-size: clamp(1.8rem, 6vw, 2.2rem);
 }
 
-.score-container,
-.multiplayer-info {
+.score-container {
   display: flex;
   justify-content: center;
   align-items: center;
@@ -221,154 +220,6 @@
   font-size: clamp(0.9rem, 3vw, 1rem);
 }
 
-/* Arena completion modal specific styles */
-.game-message.arena-complete {
-  border-color: #00ff88;
-  box-shadow: 0 0 30px rgba(0, 255, 136, 0.5);
-  max-width: 600px;
-  width: 95%;
-}
-
-.game-message.arena-complete h2 {
-  color: #00ff88;
-  margin-bottom: 25px;
-  font-size: clamp(1.6rem, 6vw, 2.2rem);
-  text-shadow: 0 0 15px #00ff88;
-}
-
-.arena-winner {
-  color: #FFD700;
-  font-size: clamp(1.1rem, 4vw, 1.4rem);
-  margin: 15px 0;
-  text-shadow: 0 0 10px #FFD700;
-}
-
-.final-scores {
-  text-align: left;
-  margin: 25px 0;
-  background: rgba(0, 0, 0, 0.4);
-  border-radius: 12px;
-  padding: 20px;
-  border: 1px solid rgba(0, 255, 136, 0.2);
-}
-
-.final-scores h3 {
-  color: #00ff88;
-  margin: 0 0 20px 0;
-  text-align: center;
-  font-size: clamp(1.1rem, 4vw, 1.3rem);
-  text-shadow: 0 0 8px #00ff88;
-}
-
-.final-score-item {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 12px 16px;
-  margin: 8px 0;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.08);
-  border-left: 4px solid transparent;
-  transition: all 0.2s ease;
-  font-size: clamp(0.9rem, 3vw, 1rem);
-}
-
-.final-score-item:hover {
-  background: rgba(255, 255, 255, 0.12);
-}
-
-.final-score-item.winner {
-  background: rgba(0, 255, 136, 0.15);
-  border-left-color: #00ff88;
-  box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
-}
-
-.final-score-item.player {
-  background: rgba(255, 170, 0, 0.15);
-  border-left-color: #ffaa00;
-  box-shadow: 0 0 8px rgba(255, 170, 0, 0.2);
-}
-
-.final-score-item.dead {
-  opacity: 0.5;
-  text-decoration: line-through;
-  filter: grayscale(50%);
-}
-
-.score-rank {
-  font-weight: bold;
-  color: #FFD700;
-  min-width: 35px;
-  font-size: clamp(0.9rem, 3vw, 1.1rem);
-  text-shadow: 0 0 5px #FFD700;
-}
-
-.score-name {
-  flex: 1;
-  margin: 0 15px;
-  font-weight: bold;
-  color: #eee;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.score-value {
-  font-weight: bold;
-  color: #00ff88;
-  min-width: 50px;
-  text-align: right;
-  font-size: clamp(0.9rem, 3vw, 1.1rem);
-  text-shadow: 0 0 5px #00ff88;
-}
-
-.score-type {
-  font-size: 0.75em;
-  opacity: 0.7;
-  font-style: italic;
-  margin-left: 8px;
-  color: #aaa;
-}
-
-.arena-stats {
-  margin: 20px 0;
-  padding: 15px;
-  background: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-}
-
-.arena-stats p {
-  margin: 8px 0;
-  color: #ccc;
-  font-size: clamp(0.8rem, 2.5vw, 0.9rem);
-}
-
-.arena-stats strong {
-  color: #00ff88;
-}
-
-/* Mobile optimizations for arena modal */
-@media (max-width: 768px) {
-  .game-message.arena-complete {
-    padding: 20px 15px;
-    max-width: 95%;
-  }
-  
-  .final-scores {
-    padding: 15px;
-    margin: 20px 0;
-  }
-  
-  .final-score-item {
-    padding: 10px 12px;
-    margin: 6px 0;
-  }
-  
-  .score-name {
-    margin: 0 10px;
-  }
-}
 
 .new-high-score {
   color: #ffaa00 !important;
@@ -486,8 +337,7 @@
     height: calc(var(--cell-size) * var(--board-size) + var(--gap-size) * (var(--board-size) - 1) + 12px);
   }
   
-  .score-container,
-  .multiplayer-info {
+  .score-container {
     gap: 12px;
     margin-bottom: 6px;
   }
@@ -507,7 +357,7 @@
     max-width: 320px;
   }
   
-  /* Optimized cell size for multiplayer boards */
+  /* Optimized cell size for large boards */
   .snake-game[style*="--board-size: 25"] {
     --cell-size: clamp(10px, 3.2vw, 18px);
   }
