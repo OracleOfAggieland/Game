@@ -13,10 +13,8 @@ import {
   isPositionOccupied,
   getRandomPosition,
   findPath,
-  getDirectionFromPositions,
   moveInDirection,
   positionEquals,
-  getAdjacentPositions,
   floodFillArea
 } from '../../utils/GameUtils';
 import './SnakeGame.css';
