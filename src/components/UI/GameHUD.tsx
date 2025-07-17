@@ -1,6 +1,6 @@
 // src/components/UI/GameHUD.tsx
 import React, { useMemo } from 'react';
-import PowerUpIndicator from '../Game/PowerUpIndicator';
+// import PowerUpIndicator from '../Game/PowerUpIndicator'; // Commented out as unused
 import { Snake } from '../../types/GameEnhancements';
 import { PowerUpManager } from '../../managers/PowerUpManager';
 import { Wave, BossSnake } from '../../types/Wave';
@@ -39,12 +39,12 @@ const GameHUD: React.FC<GameHUDProps> = React.memo(({
     [allSnakes]
   );
 
-  // Memoize formatted time to prevent unnecessary re-renders
-  const formattedTime = useMemo(() => {
-    const minutes = Math.floor(timeLeft / 60);
-    const seconds = (timeLeft % 60).toString().padStart(2, '0');
-    return `${minutes}:${seconds}`;
-  }, [timeLeft]);
+  // Memoize formatted time to prevent unnecessary re-renders (commented out as unused)
+  // const formattedTime = useMemo(() => {
+  //   const minutes = Math.floor(timeLeft / 60);
+  //   const seconds = (timeLeft % 60).toString().padStart(2, '0');
+  //   return `${minutes}:${seconds}`;
+  // }, [timeLeft]);
 
   return (
     <div className={`game-hud ${isMobile ? 'mobile' : 'desktop'}`}>

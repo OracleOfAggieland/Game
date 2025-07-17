@@ -4,21 +4,15 @@ import { doc, setDoc, updateDoc, onSnapshot, deleteDoc } from 'firebase/firestor
 import { db } from '../../services/firebase';
 import { NameGenerator } from '../../utils/NameGenerator';
 import { PowerUpManager } from '../../managers/PowerUpManager';
-import { PowerUpEffects } from '../../utils/PowerUpEffects';
-import { PowerUp, PowerUpType, POWER_UP_CONFIG } from '../../types/PowerUp';
-import { EnhancedSnake, SnakeEffectsState } from '../../types/GameEnhancements';
+// import { PowerUpEffects } from '../../utils/PowerUpEffects'; // Commented out as unused
+import { PowerUp, POWER_UP_CONFIG } from '../../types/PowerUp';
+// import { EnhancedSnake } from '../../types/GameEnhancements'; // Commented out as unused
 import { WaveManager } from '../../managers/WaveManager';
 import { Wave, BossSnake } from '../../types/Wave';
 import { BossAI, GameState as BossGameState } from '../../utils/BossAI';
 import GameHUD from '../UI/GameHUD';
 import BoardCell from './BoardCell';
-import { useFirebaseSync } from '../../hooks/useFirebaseSync';
-import { useGameLoop } from '../../hooks/useGameLoop';
-import { useInputHandling } from '../../hooks/useInputHandling';
-import { SnakeAI } from '../../services/SnakeAI';
-import { gameEvents } from '../../services/GameEventEmitter';
-import { GAME_CONSTANTS } from '../../constants/GameConstants';
-import { GameErrorHandler } from '../../services/GameErrorHandler';
+
 import './SnakeGame.css';
 
 interface Position { x: number; y: number; }
@@ -45,17 +39,7 @@ interface LocalSnake {
   lastDirectionChange?: number; // Timestamp to prevent rapid direction changes
 }
 
-// Enhanced interfaces for power-up support
-interface EnhancedGameRoom {
-  id: string;
-  players: { [playerId: string]: EnhancedSnake };
-  food: Position[];
-  powerUps: PowerUp[];
-  gameState: 'waiting' | 'playing' | 'finished';
-  maxPlayers: number;
-  createdAt?: number;
-  winner?: string;
-}
+
 
 interface GameRoom {
   id: string;
@@ -134,18 +118,18 @@ const MultiplayerSnakeGame: React.FC = () => {
   const lastPlayerDirectionChange = useRef<number>(0);
   const roomListenerRef = useRef<(() => void) | null>(null);
 
-  // Object pooling for performance
-  const cellPoolRef = useRef<import('../../utils/ObjectPool').GameCellPool>(
-    new (require('../../utils/ObjectPool').GameCellPool)(BOARD_SIZE * BOARD_SIZE, BOARD_SIZE * BOARD_SIZE * 2)
-  );
-  const particlePoolRef = useRef<import('../../utils/ObjectPool').ParticlePool>(
-    new (require('../../utils/ObjectPool').ParticlePool)(200, 1000)
-  );
+  // Object pooling for performance (commented out unused refs)
+  // const cellPoolRef = useRef<import('../../utils/ObjectPool').GameCellPool>(
+  //   new (require('../../utils/ObjectPool').GameCellPool)(BOARD_SIZE * BOARD_SIZE, BOARD_SIZE * BOARD_SIZE * 2)
+  // );
+  // const particlePoolRef = useRef<import('../../utils/ObjectPool').ParticlePool>(
+  //   new (require('../../utils/ObjectPool').ParticlePool)(200, 1000)
+  // );
 
-  // Spatial partitioning for efficient collision detection
-  const spatialGridRef = useRef<import('../../utils/SpatialPartitioning').SpatialPartitioning>(
-    new (require('../../utils/SpatialPartitioning').SpatialPartitioning)(BOARD_SIZE, BOARD_SIZE, 5)
-  );
+  // Spatial partitioning for efficient collision detection (commented out unused ref)
+  // const spatialGridRef = useRef<import('../../utils/SpatialPartitioning').SpatialPartitioning>(
+  //   new (require('../../utils/SpatialPartitioning').SpatialPartitioning)(BOARD_SIZE, BOARD_SIZE, 5)
+  // );
 
   // Power-up system
   const powerUpManagerRef = useRef<PowerUpManager>(new PowerUpManager());
@@ -297,17 +281,17 @@ const MultiplayerSnakeGame: React.FC = () => {
     };
   }, []);
 
-  // Helper function to convert Snake to EnhancedSnake
-  const createEnhancedSnake = useCallback((snake: LocalSnake): EnhancedSnake => {
-    return {
-      ...snake,
-      aiPersonality: snake.aiPersonality,
-      activePowerUps: [],
-      shieldCount: 0,
-      lastPowerUpCollection: 0,
-      effectsState: PowerUpEffects.initializeEffectsState()
-    };
-  }, []);
+  // Helper function to convert Snake to EnhancedSnake (commented out as unused)
+  // const createEnhancedSnake = useCallback((snake: LocalSnake): EnhancedSnake => {
+  //   return {
+  //     ...snake,
+  //     aiPersonality: snake.aiPersonality,
+  //     activePowerUps: [],
+  //     shieldCount: 0,
+  //     lastPowerUpCollection: 0,
+  //     effectsState: PowerUpEffects.initializeEffectsState()
+  //   };
+  // }, []);
 
   // Helper function to get next position based on direction
   const getNextPosition = useCallback((currentPos: Position, direction: Direction): Position => {
@@ -951,7 +935,7 @@ const MultiplayerSnakeGame: React.FC = () => {
         food: gameRoom.food
       }).catch(e => console.error("Failed to sync game state:", e));
     }
-  }, [gameRoom, getAIDirection, processDirectionQueue, generateFood, endGame, getNextPosition, isHost, playerId]);
+  }, [gameRoom, getAIDirection, processDirectionQueue, generateFood, endGame, getNextPosition, isHost, playerId, bossSnakes]);
 
   // Timer
   useEffect(() => {
@@ -988,7 +972,7 @@ const MultiplayerSnakeGame: React.FC = () => {
         cancelAnimationFrame(gameLoopRef.current);
       }
     };
-  }, [gameMode, gameRoom?.gameState]);
+  }, [gameMode, gameRoom?.gameState, gameLoop]);
 
   const handleKeyDown = useCallback((e: KeyboardEvent) => {
     // Prevent default browser behavior for arrow keys and WASD
@@ -1130,74 +1114,77 @@ const MultiplayerSnakeGame: React.FC = () => {
       }
     }
 
-    // Use object pooling for cell creation
-    const pooledCells: any[] = [];
+    // Use object pooling for cell creation (commented out as unused)
+    // const pooledCells: any[] = [];
 
     for (let i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
       const x = i % BOARD_SIZE;
       const y = Math.floor(i / BOARD_SIZE);
       const posKey = `${x},${y}`;
 
-      // Get a pooled cell object for metadata (not for React elements)
-      const cellData = cellPoolRef.current.get();
-      cellData.id = `cell-${i}`;
-      cellData.x = x;
-      cellData.y = y;
-      cellData.isActive = true;
+      // Get a simple cell object for metadata (not for React elements)
+      const cellData = {
+        id: `cell-${i}`,
+        x: x,
+        y: y,
+        isActive: true,
+        type: 'empty' as string,
+        color: undefined as string | undefined
+      };
 
-      let cellClass = 'cell';
-      let cellStyle = {};
+      // let cellClass = 'cell';
+      // let cellStyle = {};
 
       if (powerUpPositions.has(posKey)) {
         const powerUp = powerUpPositions.get(posKey)!;
         const config = POWER_UP_CONFIG[powerUp.type];
-        cellClass += ' powerup';
+        // cellClass += ' powerup';
         cellData.type = 'powerup';
         cellData.color = config.color;
-        cellStyle = {
-          background: config.color,
-          boxShadow: `0 0 12px ${config.color}`,
-          borderRadius: '50%',
-          animation: 'pulse 1.5s infinite'
-        };
+        // cellStyle = {
+        //   background: config.color,
+        //   boxShadow: `0 0 12px ${config.color}`,
+        //   borderRadius: '50%',
+        //   animation: 'pulse 1.5s infinite'
+        // };
       } else if (foodPositions.has(posKey)) {
-        cellClass += ' food';
+        // cellClass += ' food';
         cellData.type = 'food';
       } else if (bossHeads.has(posKey)) {
         const boss = bossHeads.get(posKey)!;
-        cellClass += ' boss-head';
+        // cellClass += ' boss-head';
         cellData.type = 'snake-head';
         cellData.color = boss.color;
-        cellStyle = {
-          background: `linear-gradient(45deg, ${boss.color}, #FFD700)`,
-          boxShadow: `0 0 15px ${boss.color}, 0 0 25px #FFD700`,
-          border: '2px solid #FFD700',
-          borderRadius: '4px',
-          animation: 'bossGlow 2s infinite alternate'
-        };
+        // cellStyle = {
+        //   background: `linear-gradient(45deg, ${boss.color}, #FFD700)`,
+        //   boxShadow: `0 0 15px ${boss.color}, 0 0 25px #FFD700`,
+        //   border: '2px solid #FFD700',
+        //   borderRadius: '4px',
+        //   animation: 'bossGlow 2s infinite alternate'
+        // };
       } else if (bossBodies.has(posKey)) {
         const boss = bossBodies.get(posKey)!;
-        cellClass += ' boss-body';
+        // cellClass += ' boss-body';
         cellData.type = 'snake-body';
         cellData.color = boss.color;
-        cellStyle = {
-          background: `linear-gradient(45deg, ${boss.color}, #FFD700)`,
-          opacity: 0.8,
-          border: '1px solid #FFD700',
-          borderRadius: '2px'
-        };
+        // cellStyle = {
+        //   background: `linear-gradient(45deg, ${boss.color}, #FFD700)`,
+        //   opacity: 0.8,
+        //   border: '1px solid #FFD700',
+        //   borderRadius: '2px'
+        // };
       } else if (snakeHeads.has(posKey)) {
-        cellClass += ' snake-head';
+        // cellClass += ' snake-head';
         const color = snakeHeads.get(posKey)!;
         cellData.type = 'snake-head';
         cellData.color = color;
-        cellStyle = { background: color, boxShadow: `0 0 8px ${color}` };
+        // cellStyle = { background: color, boxShadow: `0 0 8px ${color}` };
       } else if (snakeBodies.has(posKey)) {
-        cellClass += ' snake-body';
+        // cellClass += ' snake-body';
         const color = snakeBodies.get(posKey)!;
         cellData.type = 'snake-body';
         cellData.color = color;
-        cellStyle = { background: color, opacity: 0.7 };
+        // cellStyle = { background: color, opacity: 0.7 };
       } else {
         cellData.type = 'empty';
       }
@@ -1209,8 +1196,8 @@ const MultiplayerSnakeGame: React.FC = () => {
                            cellData.type as 'empty' | 'food' | 'powerup';
       cells.push(<BoardCell key={i} type={boardCellType} color={cellData.color} />);
 
-      // Return cell data to pool for reuse
-      cellPoolRef.current.release(cellData);
+      // Return cell data to pool for reuse (commented out as cellPoolRef is unused)
+      // cellPoolRef.current.release(cellData);
     }
 
     return cells;

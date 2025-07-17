@@ -236,8 +236,8 @@ export class WaveManager {
    * Get AI personality adjusted for current wave
    */
   public getAIPersonalityForWave(basePersonality: AIPersonality, waveNumber: number): AIPersonality {
-    const waveDefinition = this.waveDefinitions.find(def => def.waveNumber <= waveNumber);
-    const speedMultiplier = waveDefinition?.speedMultiplier || 1.0;
+    // const waveDefinition = this.waveDefinitions.find(def => def.waveNumber <= waveNumber); // Commented out as unused
+    // const speedMultiplier = waveDefinition?.speedMultiplier || 1.0; // Commented out as unused
     
     // Increase intelligence and aggression with wave progression
     const waveBonus = Math.min(0.3, (waveNumber - 1) * 0.05);
