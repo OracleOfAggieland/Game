@@ -113,13 +113,12 @@ export class SpatialGrid {
         const cell = this.grid.get(key);
         
         if (cell) {
-          for (const obj of cell.objects) {
-            // Check if object is actually within radius
+          cell.objects.forEach(obj => {
             const distance = this.getDistance(position, obj.position);
             if (distance <= radius) {
               neighbors.push(obj);
             }
-          }
+          });
         }
       }
     }
@@ -186,26 +185,24 @@ export class SpatialGrid {
     
     // Clear old positions if provided
     if (oldPositions) {
-      for (const [objId, oldPos] of oldPositions.entries()) {
+      oldPositions.forEach((oldPos, objId) => {
         const oldKey = this.getGridKey(oldPos.x, oldPos.y);
         const oldCell = this.grid.get(oldKey);
         if (oldCell) {
-          // Find and remove the object with matching ID
-          for (const obj of oldCell.objects) {
+          oldCell.objects.forEach(obj => {
             if (obj.id === objId) {
               oldCell.objects.delete(obj);
-              break;
             }
-          }
+          });
           if (oldCell.objects.size === 0) {
             this.grid.delete(oldKey);
           }
         }
-      }
+      });
     }
 
     // Add objects to new positions
-    for (const obj of objects) {
+    objects.forEach(obj => {
       const key = this.getGridKey(obj.position.x, obj.position.y);
       let cell = this.grid.get(key);
       
@@ -219,7 +216,7 @@ export class SpatialGrid {
 
       cell.objects.add(obj);
       cell.lastUpdate = currentTime;
-    }
+    });
 
     this.stats.totalUpdates += objects.length;
     this.updateStats();
@@ -249,11 +246,11 @@ export class SpatialGrid {
     const maxAge = 1000; // Remove cells not updated in 1 second
 
     // Remove stale empty cells
-    for (const [key, cell] of this.grid.entries()) {
+    this.grid.forEach((cell, key) => {
       if (cell.objects.size === 0 || currentTime - cell.lastUpdate > maxAge) {
         this.grid.delete(key);
       }
-    }
+    });
 
     this.updateStats();
   }
@@ -283,11 +280,11 @@ export class SpatialGrid {
     let totalObjects = 0;
     let maxObjects = 0;
 
-    for (const cell of this.grid.values()) {
+    this.grid.forEach(cell => {
       const objectCount = cell.objects.size;
       totalObjects += objectCount;
       maxObjects = Math.max(maxObjects, objectCount);
-    }
+    });
 
     this.stats.averageObjectsPerCell = totalObjects / this.grid.size;
     this.stats.maxObjectsPerCell = maxObjects;
@@ -310,7 +307,7 @@ export class SpatialGrid {
   public getDebugInfo(): any {
     const debugInfo: any = {};
     
-    for (const [key, cell] of this.grid.entries()) {
+    this.grid.forEach((cell, key) => {
       debugInfo[key] = {
         objectCount: cell.objects.size,
         objects: Array.from(cell.objects).map(obj => ({
@@ -320,7 +317,7 @@ export class SpatialGrid {
         })),
         lastUpdate: cell.lastUpdate
       };
-    }
+    });
 
     return debugInfo;
   }
