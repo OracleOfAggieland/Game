@@ -5,12 +5,13 @@ import { db } from '../../services/firebase';
 import { NameGenerator } from '../../utils/NameGenerator';
 import { PowerUpManager } from '../../managers/PowerUpManager';
 // import { PowerUpEffects } from '../../utils/PowerUpEffects'; // Commented out as unused
+import { PowerUp, POWER_UP_CONFIG } from '../../types/PowerUp';
 // import { EnhancedSnake } from '../../types/GameEnhancements'; // Commented out as unused
 import { WaveManager } from '../../managers/WaveManager';
 import { Wave, BossSnake } from '../../types/Wave';
 import { BossAI, GameState as BossGameState } from '../../utils/BossAI';
 import GameHUD from '../UI/GameHUD';
-import GameCanvas from './GameCanvas';
+import BoardCell from './BoardCell';
 
 import './SnakeGame.css';
 
@@ -1068,6 +1069,139 @@ const MultiplayerSnakeGame: React.FC = () => {
     };
   }, [cleanupRoom]);
 
+  // Memoized board cells for better performance with object pooling
+  const boardCells = useMemo(() => {
+    if (!gameRoom) return [];
+
+    const cells = [];
+    const foodPositions = new Set(gameRoom.food.map(f => `${f.x},${f.y}`));
+
+    // Get active power-ups
+    const activePowerUps = powerUpManagerRef.current.getActivePowerUps();
+    const powerUpPositions = new Map<string, PowerUp>();
+    activePowerUps.forEach(pu => {
+      powerUpPositions.set(`${pu.position.x},${pu.position.y}`, pu);
+    });
+
+    // Create position maps for all snakes
+    const snakeHeads = new Map<string, string>();
+    const snakeBodies = new Map<string, string>();
+    const bossHeads = new Map<string, BossSnake>();
+    const bossBodies = new Map<string, BossSnake>();
+
+    for (const p of Object.values(gameRoom.players)) {
+      if (p.isAlive && p.positions.length > 0) {
+        const headPos = `${p.positions[0].x},${p.positions[0].y}`;
+        snakeHeads.set(headPos, p.color);
+
+        for (let i = 1; i < p.positions.length; i++) {
+          const bodyPos = `${p.positions[i].x},${p.positions[i].y}`;
+          snakeBodies.set(bodyPos, p.color);
+        }
+      }
+    }
+
+    // Add boss snake positions
+    for (const boss of bossSnakes) {
+      if (boss.isAlive && boss.positions.length > 0) {
+        const headPos = `${boss.positions[0].x},${boss.positions[0].y}`;
+        bossHeads.set(headPos, boss);
+
+        for (let i = 1; i < boss.positions.length; i++) {
+          const bodyPos = `${boss.positions[i].x},${boss.positions[i].y}`;
+          bossBodies.set(bodyPos, boss);
+        }
+      }
+    }
+
+    // Use object pooling for cell creation (commented out as unused)
+    // const pooledCells: any[] = [];
+
+    for (let i = 0; i < BOARD_SIZE * BOARD_SIZE; i++) {
+      const x = i % BOARD_SIZE;
+      const y = Math.floor(i / BOARD_SIZE);
+      const posKey = `${x},${y}`;
+
+      // Get a simple cell object for metadata (not for React elements)
+      const cellData = {
+        id: `cell-${i}`,
+        x: x,
+        y: y,
+        isActive: true,
+        type: 'empty' as string,
+        color: undefined as string | undefined
+      };
+
+      // let cellClass = 'cell';
+      // let cellStyle = {};
+
+      if (powerUpPositions.has(posKey)) {
+        const powerUp = powerUpPositions.get(posKey)!;
+        const config = POWER_UP_CONFIG[powerUp.type];
+        // cellClass += ' powerup';
+        cellData.type = 'powerup';
+        cellData.color = config.color;
+        // cellStyle = {
+        //   background: config.color,
+        //   boxShadow: `0 0 12px ${config.color}`,
+        //   borderRadius: '50%',
+        //   animation: 'pulse 1.5s infinite'
+        // };
+      } else if (foodPositions.has(posKey)) {
+        // cellClass += ' food';
+        cellData.type = 'food';
+      } else if (bossHeads.has(posKey)) {
+        const boss = bossHeads.get(posKey)!;
+        // cellClass += ' boss-head';
+        cellData.type = 'snake-head';
+        cellData.color = boss.color;
+        // cellStyle = {
+        //   background: `linear-gradient(45deg, ${boss.color}, #FFD700)`,
+        //   boxShadow: `0 0 15px ${boss.color}, 0 0 25px #FFD700`,
+        //   border: '2px solid #FFD700',
+        //   borderRadius: '4px',
+        //   animation: 'bossGlow 2s infinite alternate'
+        // };
+      } else if (bossBodies.has(posKey)) {
+        const boss = bossBodies.get(posKey)!;
+        // cellClass += ' boss-body';
+        cellData.type = 'snake-body';
+        cellData.color = boss.color;
+        // cellStyle = {
+        //   background: `linear-gradient(45deg, ${boss.color}, #FFD700)`,
+        //   opacity: 0.8,
+        //   border: '1px solid #FFD700',
+        //   borderRadius: '2px'
+        // };
+      } else if (snakeHeads.has(posKey)) {
+        // cellClass += ' snake-head';
+        const color = snakeHeads.get(posKey)!;
+        cellData.type = 'snake-head';
+        cellData.color = color;
+        // cellStyle = { background: color, boxShadow: `0 0 8px ${color}` };
+      } else if (snakeBodies.has(posKey)) {
+        // cellClass += ' snake-body';
+        const color = snakeBodies.get(posKey)!;
+        cellData.type = 'snake-body';
+        cellData.color = color;
+        // cellStyle = { background: color, opacity: 0.7 };
+      } else {
+        cellData.type = 'empty';
+      }
+
+      // Create React element using memoized BoardCell component
+      // Map cell types to BoardCell expected types
+      const boardCellType = cellData.type === 'snake-head' ? 'head' : 
+                           cellData.type === 'snake-body' ? 'body' : 
+                           cellData.type as 'empty' | 'food' | 'powerup';
+      cells.push(<BoardCell key={i} type={boardCellType} color={cellData.color} />);
+
+      // Return cell data to pool for reuse (commented out as cellPoolRef is unused)
+      // cellPoolRef.current.release(cellData);
+    }
+
+    return cells;
+  }, [gameRoom, bossSnakes]);
 
   if (gameMode === 'menu') {
     return (
@@ -1222,7 +1356,7 @@ const MultiplayerSnakeGame: React.FC = () => {
       )}
 
       <div className="game-board">
-        <GameCanvas gameRoom={gameRoom} bossSnakes={bossSnakes} />
+        {boardCells}
       </div>
 
       {/* Wave Progress Indicator */}
