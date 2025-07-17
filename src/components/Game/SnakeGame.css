@@ -692,10 +692,8 @@
 
 /* Game HUD Styles */
 .game-hud {
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
+  /* Use relative positioning so the game board is pushed below the HUD */
+  position: relative;
   z-index: 10;
   pointer-events: none;
   padding: 10px;
