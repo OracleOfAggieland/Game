@@ -304,7 +304,7 @@ const SnakeGameLevel2: React.FC = () => {
       case 'ArrowLeft': case 'a': case 'A': queueDirection('LEFT'); break;
       case 'ArrowRight': case 'd': case 'D': queueDirection('RIGHT'); break;
     }
-  }, [gameOver, gameStarted, isPaused, togglePause, resetGame, startGame, queueDirection, difficulty]);
+  }, [gameOver, gameStarted, isPaused, togglePause, resetGame, startGame, queueDirection]);
 
   const handleTouchStart = useCallback((e: React.TouchEvent) => {
     e.preventDefault();
