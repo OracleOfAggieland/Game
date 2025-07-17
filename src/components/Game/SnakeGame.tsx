@@ -24,7 +24,6 @@ const SnakeGame: React.FC = () => {
   const [, setDirection] = useState<Direction>(INITIAL_DIRECTION);
   const [gameOver, setGameOver] = useState(false);
   const [score, setScore] = useState(0);
-  const [highScore, setHighScore] = useState(0);
   const [gameStarted, setGameStarted] = useState(false);
   const [isPaused, setIsPaused] = useState(false);
   const [gameSpeed, setGameSpeed] = useState(INITIAL_SPEED);
@@ -49,21 +48,6 @@ const SnakeGame: React.FC = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
-  // Load high score from localStorage
-  useEffect(() => {
-    const savedHighScore = localStorage.getItem('snakeHighScore');
-    if (savedHighScore) {
-      setHighScore(parseInt(savedHighScore, 10));
-    }
-  }, []);
-
-  // Save high score to localStorage
-  useEffect(() => {
-    if (score > highScore) {
-      setHighScore(score);
-      localStorage.setItem('snakeHighScore', score.toString());
-    }
-  }, [score, highScore]);
 
   const generateFood = useCallback((currentSnake: Position[]): Position => {
     const occupiedCells = new Set(currentSnake.map(pos => `${pos.x},${pos.y}`));
@@ -402,13 +386,6 @@ const SnakeGame: React.FC = () => {
         <h1>Classic Snake</h1>
         <div className="score-container">
           <div className="score">Score: {score}</div>
-          <div className="high-score">High Score: {highScore}</div>
-          {gameStarted && !gameOver && (
-            <div className="game-stats">
-              <div className="length">Length: {snake.length}</div>
-              <div className="speed">Speed: {Math.round((INITIAL_SPEED - gameSpeed + SPEED_INCREMENT) / SPEED_INCREMENT)}</div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -453,9 +430,6 @@ const SnakeGame: React.FC = () => {
         <div className="game-message">
           <h2>Game Over!</h2>
           <p>Final Score: {score}</p>
-          {score > 0 && score === highScore && (
-            <p className="new-high-score">🎉 New High Score! 🎉</p>
-          )}
           {isMobile ? (
             <p>Tap to play again</p>
           ) : (
