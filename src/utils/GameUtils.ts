@@ -242,3 +242,32 @@ export const moveInDirection = (position: Position, direction: Direction): Posit
     case 'RIGHT': return { x: position.x + 1, y: position.y };
   }
 };
+
+// Calculate how much open space can be reached from a start position using
+// a simple flood fill. This is used by AI routines to estimate how "safe" a
+// potential move is. A larger returned value means the position has more
+// available cells before hitting walls or other snakes.
+export const floodFillArea = (
+  start: Position,
+  obstacles: Position[],
+  boardSize: number
+): number => {
+  const visited = new Set<string>();
+  const queue: Position[] = [start];
+  visited.add(`${start.x},${start.y}`);
+
+  while (queue.length > 0) {
+    const current = queue.shift()!;
+    const neighbors = getAdjacentPositions(current, boardSize);
+
+    for (const n of neighbors) {
+      const key = `${n.x},${n.y}`;
+      if (visited.has(key)) continue;
+      if (obstacles.some(o => positionEquals(o, n))) continue;
+      visited.add(key);
+      queue.push(n);
+    }
+  }
+
+  return visited.size;
+};
