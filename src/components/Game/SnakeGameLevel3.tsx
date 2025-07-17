@@ -28,6 +28,9 @@ const GAME_SPEED = 150;
 const POWERUP_SPAWN_INTERVAL = 8000;
 const MAX_POWERUPS = 3;
 
+const isOnPowerUp = (pos: Position, list: PowerUp[]): boolean =>
+  list.some(pu => positionEquals(pu.position, pos));
+
 const SnakeGameLevel3: React.FC = () => {
   const [snake, setSnake] = useState<Position[]>(INITIAL_SNAKE);
   const [botSnake, setBotSnake] = useState<BotSnake>({
@@ -96,9 +99,9 @@ const SnakeGameLevel3: React.FC = () => {
       newFood = getRandomPosition(BOARD_SIZE);
       attempts++;
     } while (
-      (isPositionOccupied(newFood, currentSnake, []) || 
+      (isPositionOccupied(newFood, currentSnake, []) ||
        isPositionOccupied(newFood, currentBotSnake, []) ||
-       powerUps.some(pu => positionEquals(pu.position, newFood))) && 
+       isOnPowerUp(newFood, powerUps)) &&
       attempts < 100
     );
 
@@ -125,10 +128,10 @@ const SnakeGameLevel3: React.FC = () => {
       position = getRandomPosition(BOARD_SIZE);
       attempts++;
     } while (
-      (isPositionOccupied(position, snake, []) || 
+      (isPositionOccupied(position, snake, []) ||
        isPositionOccupied(position, botSnake.positions, []) ||
        positionEquals(position, food) ||
-       powerUps.some(pu => positionEquals(pu.position, position))) && 
+       isOnPowerUp(position, powerUps)) &&
       attempts < 100
     );
 
