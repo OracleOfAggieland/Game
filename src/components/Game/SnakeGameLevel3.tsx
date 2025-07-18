@@ -90,7 +90,11 @@ const SnakeGameLevel3: React.FC = () => {
   }, [score, highScore]);
 
   // Generate food avoiding all snakes
-  const generateFood = useCallback((currentSnake: Position[], currentBotSnake: Position[]): Position => {
+  const generateFood = useCallback((
+    currentSnake: Position[],
+    currentBotSnake: Position[],
+    currentPowerUps: PowerUp[]
+  ): Position => {
     let attempts = 0;
     let newFood: Position;
     
@@ -98,18 +102,17 @@ const SnakeGameLevel3: React.FC = () => {
       newFood = getRandomPosition(BOARD_SIZE);
       attempts++;
     } while (
-      (isPositionOccupied(newFood, currentSnake, []) ||
-       isPositionOccupied(newFood, currentBotSnake, []) ||
-       isOnPowerUp(newFood, powerUps)) &&
+      (isPositionOccupied(newFood, currentSnake, [], currentBotSnake) ||
+       isOnPowerUp(newFood, currentPowerUps)) &&
       attempts < 100
     );
 
     return newFood;
-  }, [powerUps]);
+  }, []);
 
-  // Initialize food position
+  // Initialize food position once on mount
   useEffect(() => {
-    setFood(generateFood(INITIAL_SNAKE, INITIAL_BOT_SNAKE));
+    setFood(generateFood(INITIAL_SNAKE, INITIAL_BOT_SNAKE, []));
   }, [generateFood]);
 
   // Spawn power-ups
@@ -315,7 +318,7 @@ const SnakeGameLevel3: React.FC = () => {
         if (positionEquals(head, food)) {
           const points = 10 * getScoreMultiplier(activePowerUps);
           setScore(prev => prev + points);
-          setFood(generateFood(newSnake, botSnake.positions));
+          setFood(generateFood(newSnake, botSnake.positions, powerUps));
         } else {
           newSnake.pop();
         }
@@ -384,7 +387,7 @@ const SnakeGameLevel3: React.FC = () => {
         if (positionEquals(head, food)) {
           const points = 10 * getScoreMultiplier(botActivePowerUps);
           newBot.score += points;
-          setFood(generateFood(snake, newBot.positions));
+          setFood(generateFood(snake, newBot.positions, powerUps));
         } else {
           newBot.positions.pop();
         }
@@ -430,7 +433,7 @@ const SnakeGameLevel3: React.FC = () => {
       name: 'Bot Snake',
       score: 0
     });
-    setFood(generateFood(INITIAL_SNAKE, INITIAL_BOT_SNAKE));
+    setFood(generateFood(INITIAL_SNAKE, INITIAL_BOT_SNAKE, []));
     setDirection(INITIAL_DIRECTION);
     lastDirection.current = INITIAL_DIRECTION;
     setGameOver(false);
