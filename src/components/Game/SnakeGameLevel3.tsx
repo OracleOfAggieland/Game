@@ -9,14 +9,13 @@ import {
   POWER_UP_CONFIG, 
   PowerUpType 
 } from '../../types/GameTypes';
-import { 
-  isPositionOccupied, 
-  getRandomPosition, 
+import {
+  isPositionOccupied,
+  getRandomPosition,
   findPath,
-  getDirectionFromPositions,
   moveInDirection,
   positionEquals,
-  getAdjacentPositions
+  floodFillArea
 } from '../../utils/GameUtils';
 import './SnakeGame.css';
 
@@ -91,7 +90,11 @@ const SnakeGameLevel3: React.FC = () => {
   }, [score, highScore]);
 
   // Generate food avoiding all snakes
-  const generateFood = useCallback((currentSnake: Position[], currentBotSnake: Position[]): Position => {
+  const generateFood = useCallback((
+    currentSnake: Position[],
+    currentBotSnake: Position[],
+    currentPowerUps: PowerUp[]
+  ): Position => {
     let attempts = 0;
     let newFood: Position;
     
@@ -99,18 +102,17 @@ const SnakeGameLevel3: React.FC = () => {
       newFood = getRandomPosition(BOARD_SIZE);
       attempts++;
     } while (
-      (isPositionOccupied(newFood, currentSnake, []) ||
-       isPositionOccupied(newFood, currentBotSnake, []) ||
-       isOnPowerUp(newFood, powerUps)) &&
+      (isPositionOccupied(newFood, currentSnake, [], currentBotSnake) ||
+       isOnPowerUp(newFood, currentPowerUps)) &&
       attempts < 100
     );
 
     return newFood;
-  }, [powerUps]);
+  }, []);
 
-  // Initialize food position
+  // Initialize food position once on mount
   useEffect(() => {
-    setFood(generateFood(INITIAL_SNAKE, INITIAL_BOT_SNAKE));
+    setFood(generateFood(INITIAL_SNAKE, INITIAL_BOT_SNAKE, []));
   }, [generateFood]);
 
   // Spawn power-ups
@@ -190,92 +192,53 @@ const SnakeGameLevel3: React.FC = () => {
   const getBotDirection = useCallback((bot: BotSnake, playerSnake: Position[]): Direction => {
     const head = bot.positions[0];
     const currentDir = bot.direction;
-    
-    // Find nearest target (food or power-up)
-    let targets: { pos: Position, priority: number }[] = [
-      { pos: food, priority: 1 }
-    ];
-    
-    // Add power-ups as targets
+
+    // Determine potential targets: food and power-ups with simple prioritisation
+    let targets: { pos: Position; priority: number }[] = [{ pos: food, priority: 1 }];
     powerUps.forEach(pu => {
       let priority = 2;
-      if (pu.type === 'INVINCIBILITY' || pu.type === 'SPEED_BOOST') priority = 0; // High priority
+      if (pu.type === 'INVINCIBILITY' || pu.type === 'SPEED_BOOST') priority = 0;
       targets.push({ pos: pu.position, priority });
     });
-    
-    // Sort by priority then distance
+
     targets.sort((a, b) => {
       if (a.priority !== b.priority) return a.priority - b.priority;
       const distA = Math.abs(head.x - a.pos.x) + Math.abs(head.y - a.pos.y);
       const distB = Math.abs(head.x - b.pos.x) + Math.abs(head.y - b.pos.y);
       return distA - distB;
     });
-    
+
     const target = targets[0].pos;
-    
-    // Find path to target
-    const occupiedPositions = [...playerSnake, ...bot.positions.slice(1)];
-    const path = findPath(head, target, [], BOARD_SIZE, occupiedPositions);
-    
-    if (path.length > 1) {
-      const nextPos = path[1];
-      const newDir = getDirectionFromPositions(head, nextPos);
-      
-      // Check if move is safe
-      const futureHead = moveInDirection(head, newDir);
-      
-      // Avoid walls
-      if (futureHead.x < 0 || futureHead.x >= BOARD_SIZE || 
-          futureHead.y < 0 || futureHead.y >= BOARD_SIZE) {
-        // Find alternative direction
-        const alternatives = ['UP', 'DOWN', 'LEFT', 'RIGHT'] as Direction[];
-        for (const dir of alternatives) {
-          if (dir === getOppositeDirection(currentDir)) continue;
-          const altHead = moveInDirection(head, dir);
-          if (altHead.x >= 0 && altHead.x < BOARD_SIZE && 
-              altHead.y >= 0 && altHead.y < BOARD_SIZE &&
-              !occupiedPositions.some(pos => positionEquals(pos, altHead))) {
-            return dir;
-          }
-        }
-      }
-      
-      // Avoid collisions unless we have invincibility or ghost mode
+    const occupied = [...playerSnake, ...bot.positions.slice(1)];
+    const path = findPath(head, target, [], BOARD_SIZE, occupied);
+
+    const candidateDirs: Direction[] = ['UP', 'DOWN', 'LEFT', 'RIGHT'];
+    let bestDir = currentDir;
+    let bestScore = -Infinity;
+
+    candidateDirs.forEach(dir => {
+      if (dir === getOppositeDirection(currentDir) && bot.positions.length > 1) return;
+      const nextPos = moveInDirection(head, dir);
+
+      // wall check
+      if (nextPos.x < 0 || nextPos.x >= BOARD_SIZE || nextPos.y < 0 || nextPos.y >= BOARD_SIZE) return;
+
       if (!hasInvincibility(botActivePowerUps) && !hasGhostMode(botActivePowerUps)) {
-        if (playerSnake.some(pos => positionEquals(pos, futureHead)) ||
-            bot.positions.slice(1).some(pos => positionEquals(pos, futureHead))) {
-          // Find safe alternative
-          const adjacents = getAdjacentPositions(head, BOARD_SIZE);
-          const safe = adjacents.filter(pos => 
-            !occupiedPositions.some(occ => positionEquals(occ, pos))
-          );
-          if (safe.length > 0) {
-            return getDirectionFromPositions(head, safe[0]);
-          }
-        }
+        if (occupied.some(p => positionEquals(p, nextPos))) return;
       }
-      
-      return newDir;
-    }
-    
-    // If no path found, avoid immediate collision
-    const adjacents = getAdjacentPositions(head, BOARD_SIZE);
-    const safe = adjacents.filter(pos => 
-      !occupiedPositions.some(occ => positionEquals(occ, pos))
-    );
-    
-    if (safe.length > 0) {
-      // Choose direction that doesn't reverse
-      for (const pos of safe) {
-        const dir = getDirectionFromPositions(head, pos);
-        if (dir !== getOppositeDirection(currentDir)) {
-          return dir;
-        }
+
+      const area = floodFillArea(nextPos, occupied, BOARD_SIZE);
+      const distance = Math.abs(nextPos.x - target.x) + Math.abs(nextPos.y - target.y);
+      const followsPath = path.length > 1 && positionEquals(path[1], nextPos) ? 1 : 0;
+
+      const score = area * 0.2 - distance + followsPath * 2;
+      if (score > bestScore) {
+        bestScore = score;
+        bestDir = dir;
       }
-      return getDirectionFromPositions(head, safe[0]);
-    }
-    
-    return currentDir; // No safe move, continue in same direction
+    });
+
+    return bestDir;
   }, [food, powerUps, botActivePowerUps, hasInvincibility, hasGhostMode]);
 
   const getOppositeDirection = (dir: Direction): Direction => {
@@ -355,7 +318,7 @@ const SnakeGameLevel3: React.FC = () => {
         if (positionEquals(head, food)) {
           const points = 10 * getScoreMultiplier(activePowerUps);
           setScore(prev => prev + points);
-          setFood(generateFood(newSnake, botSnake.positions));
+          setFood(generateFood(newSnake, botSnake.positions, powerUps));
         } else {
           newSnake.pop();
         }
@@ -424,7 +387,7 @@ const SnakeGameLevel3: React.FC = () => {
         if (positionEquals(head, food)) {
           const points = 10 * getScoreMultiplier(botActivePowerUps);
           newBot.score += points;
-          setFood(generateFood(snake, newBot.positions));
+          setFood(generateFood(snake, newBot.positions, powerUps));
         } else {
           newBot.positions.pop();
         }
@@ -470,7 +433,7 @@ const SnakeGameLevel3: React.FC = () => {
       name: 'Bot Snake',
       score: 0
     });
-    setFood(generateFood(INITIAL_SNAKE, INITIAL_BOT_SNAKE));
+    setFood(generateFood(INITIAL_SNAKE, INITIAL_BOT_SNAKE, []));
     setDirection(INITIAL_DIRECTION);
     lastDirection.current = INITIAL_DIRECTION;
     setGameOver(false);
