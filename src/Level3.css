@@ -1,0 +1,15 @@
+.level3-wrapper {
+  text-align: center;
+}
+
+canvas {
+  image-rendering: pixelated;
+  border: 2px solid #333;
+  background-color: #fafafa;
+}
+
+.game-over {
+  margin-bottom: 10px;
+  color: crimson;
+  font-weight: bold;
+}
