@@ -1,0 +1,170 @@
+.particle-canvas {
+  position: absolute;
+  top: 0;
+  left: 0;
+  pointer-events: none;
+  z-index: 50;
+  will-change: transform;
+}
+
+/* Screen shake animation */
+@keyframes shake {
+  0%, 100% {
+    transform: translate(0, 0) rotate(0deg);
+  }
+  10% {
+    transform: translate(-2px, -2px) rotate(-0.5deg);
+  }
+  20% {
+    transform: translate(2px, -2px) rotate(0.5deg);
+  }
+  30% {
+    transform: translate(-2px, 2px) rotate(-0.5deg);
+  }
+  40% {
+    transform: translate(2px, 2px) rotate(0.5deg);
+  }
+  50% {
+    transform: translate(-1px, -1px) rotate(-0.25deg);
+  }
+  60% {
+    transform: translate(1px, -1px) rotate(0.25deg);
+  }
+  70% {
+    transform: translate(-1px, 1px) rotate(-0.25deg);
+  }
+  80% {
+    transform: translate(1px, 1px) rotate(0.25deg);
+  }
+  90% {
+    transform: translate(0, -1px) rotate(0deg);
+  }
+}
+
+.particle-canvas.shake {
+  animation: shake 0.3s ease-in-out;
+}
+
+/* Combo text animation */
+@keyframes comboFloat {
+  0% {
+    transform: translateY(0) scale(0.5);
+    opacity: 0;
+  }
+  20% {
+    transform: translateY(-10px) scale(1.2);
+    opacity: 1;
+  }
+  80% {
+    transform: translateY(-40px) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-60px) scale(0.8);
+    opacity: 0;
+  }
+}
+
+.combo-text {
+  position: absolute;
+  font-size: 24px;
+  font-weight: bold;
+  color: #FFD700;
+  text-shadow: 
+    0 0 10px #FFD700,
+    0 0 20px #FFD700,
+    0 0 30px #FFD700;
+  animation: comboFloat 1.5s ease-out forwards;
+  pointer-events: none;
+  z-index: 60;
+}
+
+/* Score popup animation */
+@keyframes scorePopup {
+  0% {
+    transform: scale(0) rotate(0deg);
+    opacity: 0;
+  }
+  50% {
+    transform: scale(1.2) rotate(5deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0deg) translateY(-20px);
+    opacity: 0;
+  }
+}
+
+.score-popup {
+  position: absolute;
+  font-size: 18px;
+  font-weight: bold;
+  color: #00ff88;
+  text-shadow: 
+    0 0 5px #00ff88,
+    0 0 10px #00ff88;
+  animation: scorePopup 1s ease-out forwards;
+  pointer-events: none;
+  z-index: 60;
+}
+
+/* Power-up collection effect */
+@keyframes powerupCollect {
+  0% {
+    transform: scale(1) rotate(0deg);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(2) rotate(180deg);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(0) rotate(360deg);
+    opacity: 0;
+  }
+}
+
+.powerup-collect-effect {
+  position: absolute;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  animation: powerupCollect 0.6s ease-out forwards;
+  pointer-events: none;
+  z-index: 55;
+}
+
+/* Snake trail effect */
+.snake-trail {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 5;
+  opacity: 0.3;
+  animation: fadeOut 0.5s ease-out forwards;
+}
+
+@keyframes fadeOut {
+  to {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+}
+
+/* Glow effects for enhanced visuals */
+.glow-effect {
+  filter: drop-shadow(0 0 10px currentColor);
+}
+
+.pulse-glow {
+  animation: pulseGlow 2s infinite alternate;
+}
+
+@keyframes pulseGlow {
+  0% {
+    filter: drop-shadow(0 0 5px currentColor);
+  }
+  100% {
+    filter: drop-shadow(0 0 20px currentColor);
+  }
+}

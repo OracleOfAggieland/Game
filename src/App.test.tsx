@@ -4,5 +4,5 @@ import App from './App';
 
 test('renders game menu', () => {
   render(<App />);
-  expect(screen.getByText(/snake game/i)).toBeInTheDocument();
+  expect(screen.getByText(/snake evolution/i)).toBeInTheDocument();
 });
