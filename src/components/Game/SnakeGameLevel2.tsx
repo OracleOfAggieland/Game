@@ -11,6 +11,13 @@ import {
 } from '../../utils/GameUtils';
 import './SnakeGame.css';
 
+export interface SnakeGameLevel2Props {
+  /** Enable confetti/particle effects */
+  particlesEnabled?: boolean;
+  /** Enable sound effects */
+  soundEnabled?: boolean;
+}
+
 const BOARD_SIZE = 20;
 const INITIAL_SNAKE: Position[] = [{ x: 10, y: 10 }];
 const INITIAL_DIRECTION: Direction = 'RIGHT';
@@ -19,7 +26,7 @@ const MIN_SPEED = 80;
 const SPEED_INCREMENT = 10;
 const SCORE_THRESHOLD = 50;
 
-const SnakeGameLevel2: React.FC = () => {
+const SnakeGameLevel2: React.FC<SnakeGameLevel2Props> = ({ particlesEnabled = false, soundEnabled = true }) => {
   const [snake, setSnake] = useState<Position[]>(INITIAL_SNAKE);
   const [food, setFood] = useState<Position>({ x: 15, y: 15 });
   const [, setDirection] = useState<Direction>(INITIAL_DIRECTION);
