@@ -310,7 +310,7 @@ const SnakeGameLevel3: React.FC<SnakeGameLevel3Props> = ({ particlesEnabled = fa
 
         // Check collisions
         const selfCollision = currentSnake.some(segment => positionEquals(segment, head));
-        const botCollision = !hasGhostMode(activePowerUps) && 
+        const botCollision = !hasGhostMode(activePowerUps) && !hasGhostMode(botActivePowerUps) &&
                            botSnake.positions.some(segment => positionEquals(segment, head));
         
         if ((selfCollision || botCollision) && !hasInvincibility(activePowerUps)) {
@@ -379,7 +379,7 @@ const SnakeGameLevel3: React.FC<SnakeGameLevel3Props> = ({ particlesEnabled = fa
 
         // Check collisions for bot
         const selfCollision = currentBot.positions.some(segment => positionEquals(segment, head));
-        const playerCollision = !hasGhostMode(botActivePowerUps) && 
+        const playerCollision = !hasGhostMode(botActivePowerUps) && !hasGhostMode(activePowerUps) &&
                               snake.some(segment => positionEquals(segment, head));
         
         if ((selfCollision || playerCollision) && !hasInvincibility(botActivePowerUps)) {
