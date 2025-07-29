@@ -19,6 +19,13 @@ import {
 } from '../../utils/GameUtils';
 import './SnakeGame.css';
 
+export interface SnakeGameLevel3Props {
+  /** Enable confetti/particle effects */
+  particlesEnabled?: boolean;
+  /** Enable sound effects */
+  soundEnabled?: boolean;
+}
+
 const BOARD_SIZE = 20;
 const INITIAL_SNAKE: Position[] = [{ x: 5, y: 10 }];
 const INITIAL_BOT_SNAKE: Position[] = [{ x: 15, y: 10 }];
@@ -30,7 +37,7 @@ const MAX_POWERUPS = 3;
 const isOnPowerUp = (pos: Position, list: PowerUp[]): boolean =>
   list.some(pu => positionEquals(pu.position, pos));
 
-const SnakeGameLevel3: React.FC = () => {
+const SnakeGameLevel3: React.FC<SnakeGameLevel3Props> = ({ particlesEnabled = false, soundEnabled = true }) => {
   const [snake, setSnake] = useState<Position[]>(INITIAL_SNAKE);
   const [botSnake, setBotSnake] = useState<BotSnake>({
     id: 'bot1',

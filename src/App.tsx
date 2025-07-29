@@ -9,6 +9,9 @@ type GameMode = 'menu' | 'level1' | 'level2' | 'level3';
 
 function App() {
   const [gameMode, setGameMode] = useState<GameMode>('menu');
+  // Toggles for optional effects
+  const [particlesEnabled, setParticlesEnabled] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
 
   const renderModeSelector = () => (
     <div className="app-container">
@@ -39,6 +42,25 @@ function App() {
           <div className="button-title">🤖 Level 3: Bot Battle</div>
           <div className="button-description">Face off against AI with power-ups!</div>
         </button>
+
+        <div className="options">
+          <label>
+            <input
+              type="checkbox"
+              checked={particlesEnabled}
+              onChange={(e) => setParticlesEnabled(e.target.checked)}
+            />
+            Particles
+          </label>
+          <label>
+            <input
+              type="checkbox"
+              checked={soundEnabled}
+              onChange={(e) => setSoundEnabled(e.target.checked)}
+            />
+            Sound
+          </label>
+        </div>
         
         <div className="feature-box">
           <h3>New Features!</h3>
@@ -66,9 +88,24 @@ function App() {
     <div className="App">
       {gameMode === 'menu' && renderModeSelector()}
       {gameMode !== 'menu' && renderBackButton()}
-      {gameMode === 'level1' && <SnakeGame />}
-      {gameMode === 'level2' && <SnakeGameLevel2 />}
-      {gameMode === 'level3' && <SnakeGameLevel3 />}
+      {gameMode === 'level1' && (
+        <SnakeGame
+          particlesEnabled={particlesEnabled}
+          soundEnabled={soundEnabled}
+        />
+      )}
+      {gameMode === 'level2' && (
+        <SnakeGameLevel2
+          particlesEnabled={particlesEnabled}
+          soundEnabled={soundEnabled}
+        />
+      )}
+      {gameMode === 'level3' && (
+        <SnakeGameLevel3
+          particlesEnabled={particlesEnabled}
+          soundEnabled={soundEnabled}
+        />
+      )}
     </div>
   );
 }

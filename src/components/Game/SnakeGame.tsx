@@ -2,6 +2,17 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import './SnakeGame.css';
 
+export interface SnakeGameProps {
+  /**
+   * Whether confetti/particle effects should be shown on certain events.
+   */
+  particlesEnabled?: boolean;
+  /**
+   * Whether game sound effects are enabled.
+   */
+  soundEnabled?: boolean;
+}
+
 interface Position {
   x: number;
   y: number;
@@ -18,7 +29,7 @@ const SPEED_INCREMENT = 8;
 const SCORE_THRESHOLD = 50;
 const MIN_DIRECTION_CHANGE_INTERVAL = 50; // Minimum ms between direction changes
 
-const SnakeGame: React.FC = () => {
+const SnakeGame: React.FC<SnakeGameProps> = ({ particlesEnabled = false, soundEnabled = true }) => {
   const [snake, setSnake] = useState<Position[]>(INITIAL_SNAKE);
   const [food, setFood] = useState<Position>({ x: 15, y: 15 });
   const [, setDirection] = useState<Direction>(INITIAL_DIRECTION);
